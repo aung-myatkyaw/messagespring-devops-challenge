@@ -1,0 +1,34 @@
+# Runs the production image locally with the same hardening as the Kubernetes pod:
+# non-root, read-only root filesystem, no Linux capabilities, resource limits.
+#
+#   cp .env.example .env     # optional: override HOST_PORT / APP_VERSION
+#   docker compose up --build --wait
+#   curl localhost:3000/api/health
+
+name: messagespring
+
+services:
+  web:
+    build:
+      context: ./application
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+    image: web:local
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    # The health check comes from the image's HEALTHCHECK (GET /api/health),
+    # so `docker compose up --wait` returns once the service is healthy.
+    read_only: true
+    tmpfs:
+      # The only writable path Next.js needs; owned by the image's non-root user.
+      - /app/.next/cache:uid=65532,gid=65532,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    restart: unless-stopped
