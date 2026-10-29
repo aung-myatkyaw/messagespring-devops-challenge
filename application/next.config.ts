@@ -6,6 +6,14 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
 
+  // The app serves no images through next/image, so the image optimiser and its
+  // native dependency (sharp/libvips, ~38 MB with both libc variants) are dropped
+  // from the standalone output: smaller image, fewer native libraries to patch.
+  images: { unoptimized: true },
+  outputFileTracingExcludes: {
+    "*": ["node_modules/sharp/**", "node_modules/@img/**"],
+  },
+
   async headers() {
     return [
       {
