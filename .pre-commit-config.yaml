@@ -1,0 +1,59 @@
+# Local guardrails. The same checks run in CI so they can't be skipped.
+# Install: pre-commit install   (installs pre-commit + commit-msg hooks)
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]   # only the commit-msg hook runs at commit-msg
+
+repos:
+  # Generic hygiene + cheap secret detection
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: ^k8s/.*/templates/   # Helm templates aren't plain YAML
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
+      # detect-aws-credentials is deliberately omitted: it matches against the
+      # developer's local ~/.aws/credentials (false positives); gitleaks covers it.
+
+  # Secret scanning over the staged diff
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  # Terraform: format, validate, lint
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.109.3
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+        args: [--hook-config=--retry-once-with-cleanup=true]
+      - id: terraform_tflint
+
+  # Conventional Commits on the commit message
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  # Tools installed locally (brew install hadolint kubeconform)
+  - repo: local
+    hooks:
+      - id: hadolint
+        name: hadolint (Dockerfile lint)
+        entry: hadolint
+        language: system
+        files: (^|/)Dockerfile$
+      - id: kubeconform
+        name: kubeconform (k8s schema validation)
+        entry: kubeconform -strict -summary -ignore-missing-schemas -ignore-filename-pattern kustomization.yaml
+        language: system
+        files: ^k8s/.*\.ya?ml$
+        exclude: ^k8s/.*/templates/
