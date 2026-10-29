@@ -51,9 +51,10 @@ repos:
         entry: hadolint
         language: system
         files: (^|/)Dockerfile$
+      # Raw manifests (e.g. Argo CD Applications); Helm templates are validated after rendering.
       - id: kubeconform
         name: kubeconform (k8s schema validation)
-        entry: kubeconform -strict -summary -ignore-missing-schemas -ignore-filename-pattern kustomization.yaml
+        entry: kubeconform -strict -summary -ignore-missing-schemas
         language: system
         files: ^k8s/.*\.ya?ml$
-        exclude: ^k8s/.*/templates/
+        exclude: ^k8s/(.*/)?(templates/|Chart\.yaml|values.*\.yaml)
