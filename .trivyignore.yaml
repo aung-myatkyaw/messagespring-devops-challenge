@@ -15,3 +15,17 @@ misconfigurations:
     statement: >-
       EKS scheduler and controller-manager logs are off on purpose: high volume, low
       value at this size. api, audit and authenticator logs are enabled.
+  - id: AWS-0089
+    paths:
+      - "**/bootstrap/s3.tf"
+      - "**/modules/log-storage/s3.tf"
+    statement: >-
+      No S3 server access logging on the state and log buckets. Access is audited with
+      CloudTrail at the account level; access logging would need another bucket per bucket.
+  - id: AWS-0090
+    paths:
+      - "**/modules/log-storage/s3.tf"
+    statement: >-
+      No versioning on Loki and ALB log buckets: append-only telemetry. Versioning would
+      keep every chunk Loki's compactor deletes, so logs would outlive their retention.
+      The Terraform state bucket is versioned.
