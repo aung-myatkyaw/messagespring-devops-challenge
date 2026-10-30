@@ -23,7 +23,9 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
-# .terraform.lock.hcl IS committed (pins provider checksums)
+# .terraform.lock.hcl IS committed for roots (pins provider checksums), but not
+# for reusable modules: the root that calls a module decides provider versions.
+infra/modules/**/.terraform.lock.hcl
 
 # --- Node / Next.js ---
 node_modules/
