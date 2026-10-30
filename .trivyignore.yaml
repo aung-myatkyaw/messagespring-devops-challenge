@@ -1,0 +1,17 @@
+# Accepted Trivy misconfiguration findings. Each one has a reason; anything not
+# listed here fails CI at HIGH/CRITICAL. Review when the cause changes.
+misconfigurations:
+  - id: AWS-0104
+    paths:
+      - "**/modules/eks/node_groups.tf"
+    statement: >-
+      EKS node security group egress to 0.0.0.0/0 (community module default rule).
+      Pods share the node security group and need HTTPS to AWS APIs, ECR and GitHub,
+      which a security group can't filter by hostname. Egress is controlled by private
+      subnets behind NAT and by Kubernetes NetworkPolicies per namespace.
+  - id: AWS-0038
+    paths:
+      - "**/modules/eks/main.tf"
+    statement: >-
+      EKS scheduler and controller-manager logs are off on purpose: high volume, low
+      value at this size. api, audit and authenticator logs are enabled.
