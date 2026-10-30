@@ -43,7 +43,6 @@ output "pod_identity_role_arns" {
   value = {
     aws_ebs_csi_driver           = module.ebs_csi_pod_identity.iam_role_arn
     aws_load_balancer_controller = module.aws_load_balancer_controller_pod_identity.iam_role_arn
-    external_dns                 = module.external_dns_pod_identity.iam_role_arn
     external_secrets             = module.external_secrets_pod_identity.iam_role_arn
     loki                         = module.loki_pod_identity.iam_role_arn
   }

@@ -4,11 +4,13 @@
 #
 # The namespaces and service account names below must match the Helm values
 # under k8s/platform/.
+#
+# external-dns has no AWS role: DNS is in Cloudflare, so it authenticates with a
+# Cloudflare API token that External Secrets syncs from Secrets Manager.
 
 locals {
   service_accounts = {
     aws_load_balancer_controller = { namespace = "kube-system", service_account = "aws-load-balancer-controller" }
-    external_dns                 = { namespace = "external-dns", service_account = "external-dns" }
     external_secrets             = { namespace = "external-secrets", service_account = "external-secrets" }
     loki                         = { namespace = "logging", service_account = "loki" }
   }
@@ -37,23 +39,6 @@ module "aws_load_balancer_controller_pod_identity" {
 
   associations = {
     this = merge(local.service_accounts.aws_load_balancer_controller, { cluster_name = module.eks.cluster_name })
-  }
-
-  tags = var.tags
-}
-
-module "external_dns_pod_identity" {
-  source  = "terraform-aws-modules/eks-pod-identity/aws"
-  version = "2.10.0"
-
-  name = "${var.name}-external-dns"
-
-  # Change records only in the given hosted zone(s).
-  attach_external_dns_policy    = true
-  external_dns_hosted_zone_arns = var.external_dns_hosted_zone_arns
-
-  associations = {
-    this = merge(local.service_accounts.external_dns, { cluster_name = module.eks.cluster_name })
   }
 
   tags = var.tags

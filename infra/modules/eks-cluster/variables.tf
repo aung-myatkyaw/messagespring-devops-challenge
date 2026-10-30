@@ -113,11 +113,6 @@ variable "deletion_protection" {
 
 # ----------------------------------------------------- Pod Identity scoping
 
-variable "external_dns_hosted_zone_arns" {
-  description = "Route53 hosted zones external-dns may change records in."
-  type        = list(string)
-}
-
 variable "external_secrets_secret_arns" {
   description = "Secrets Manager ARNs (wildcards allowed, e.g. an environment prefix) External Secrets may read."
   type        = list(string)
