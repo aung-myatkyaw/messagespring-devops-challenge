@@ -2,10 +2,17 @@
 # order them; the root waits for each wave's Applications to be Healthy before
 # starting the next (Application health check in k8s/platform/argo-cd):
 #
-#   -10  argocd-projects  AppProjects
-#    -9  namespaces       Namespaces with Pod Security and readiness-gate labels
-#   (-8 .. -1 platform add-ons)
-#    10  web              the application
+#   -10  argocd-projects               AppProjects
+#    -9  namespaces                    Namespaces (Pod Security, readiness gate)
+#    -8  argocd, storage               Argo CD itself; default gp3 StorageClass
+#    -7  karpenter                     node autoscaler + CRDs
+#    -6  karpenter-nodes               EC2NodeClass + NodePool "apps"
+#    -5  aws-load-balancer-controller  Ingress -> ALB, pod readiness gate
+#        metrics-server                Metrics API for the HPA
+#    -4  external-secrets              operator + ClusterSecretStore
+#    -3  external-dns                  Cloudflare records for Ingress hosts
+#   (-2 .. -1 logging)
+#    10  web                           the application
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application
