@@ -1,0 +1,20 @@
+# Cluster storage: the default gp3 StorageClass.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: storage
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-8"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+    targetRevision: main
+    path: k8s/platform/storage
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

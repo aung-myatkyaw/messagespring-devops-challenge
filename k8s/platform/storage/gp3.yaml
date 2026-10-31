@@ -1,0 +1,18 @@
+# Default StorageClass: encrypted gp3 EBS volumes through the EBS CSI driver
+# (EKS add-on). Newer EKS clusters have no default class, and the legacy gp2
+# class is slower and costs more per GiB. Used by Loki's write-ahead log.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+# Create the volume in the zone where the pod is scheduled (EBS volumes are
+# zonal).
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Delete
