@@ -1,0 +1,3 @@
+clusterName: messagespring-prod
+vpcTags:
+  Name: messagespring-prod

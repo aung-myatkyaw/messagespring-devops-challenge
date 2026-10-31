@@ -1,0 +1,3 @@
+clusterName: messagespring-dev
+vpcTags:
+  Name: messagespring-dev

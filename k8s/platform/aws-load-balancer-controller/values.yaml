@@ -1,0 +1,48 @@
+# Values for the AWS Load Balancer Controller chart, shared by dev and prod;
+# values-<env>.yaml sets the cluster. It turns Ingress objects into ALBs (pod
+# IPs as targets) and injects the pod readiness gate used by the web rollout.
+
+# Must match the Pod Identity association (infra/modules/eks-cluster).
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+
+# IMDS is closed to pods (hop limit 1), so the controller can't discover its
+# region and VPC from the instance. The VPC is found by its Name tag through
+# the EC2 API instead, which keeps the account-specific VPC ID out of Git.
+region: ap-southeast-7
+
+# Two replicas (leader election): its webhooks add the readiness gate to web
+# pods and validate Ingresses, so it should survive a node drain.
+replicaCount: 2
+podDisruptionBudget:
+  maxUnavailable: 1
+
+nodeSelector:
+  role: system
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+    effect: NoSchedule
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+# The chart leaves these commented out.
+securityContext:
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  seccompProfile:
+    type: RuntimeDefault
+
+# Off: we expose the service through Ingress only. When on, this webhook
+# intercepts every new Service of type LoadBalancer and, with its default
+# failurePolicy Fail, blocks creating one whenever the controller is down.
+enableServiceMutatorWebhook: false

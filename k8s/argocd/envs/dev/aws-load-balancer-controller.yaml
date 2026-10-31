@@ -1,0 +1,60 @@
+# AWS Load Balancer Controller: Ingress -> ALB, and the pod readiness gate.
+# It must be running before the web pods are created (wave -5 < 10): the
+# readiness gate is added by its webhook when a pod is created, never later.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: platform
+  sources:
+    - repoURL: https://aws.github.io/eks-charts
+      chart: aws-load-balancer-controller
+      targetRevision: 3.6.2
+      helm:
+        releaseName: aws-load-balancer-controller
+        valueFiles:
+          - $values/k8s/platform/aws-load-balancer-controller/values.yaml
+          - $values/k8s/platform/aws-load-balancer-controller/values-dev.yaml
+    - repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+      targetRevision: main
+      ref: values
+  # Same namespace as the Pod Identity association.
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  # Without cert-manager, the chart generates a new webhook certificate every
+  # time it is rendered, so Argo CD would always see a diff (and a sync would
+  # replace a working certificate). Ignore the certificate and the CA bundle,
+  # and keep the live values when syncing.
+  ignoreDifferences:
+    - kind: Secret
+      name: aws-load-balancer-tls
+      jsonPointers:
+        - /data
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
