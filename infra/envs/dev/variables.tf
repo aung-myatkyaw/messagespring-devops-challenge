@@ -59,15 +59,20 @@ variable "endpoint_public_access_cidrs" {
 }
 
 variable "admin_sso_permission_set" {
-  description = "IAM Identity Center permission set whose role gets cluster-admin."
+  description = "IAM Identity Center permission set whose role gets cluster-admin. null: no Identity Center lookup."
   type        = string
   default     = "AdministratorAccess"
 }
 
-variable "extra_admin_role_arns" {
-  description = "Other IAM roles that get cluster-admin (e.g. a break-glass role). Never CI roles."
+variable "extra_admin_principal_arns" {
+  description = "Other IAM roles or users that get cluster-admin (e.g. a break-glass role). Never CI roles."
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = var.admin_sso_permission_set != null || length(var.extra_admin_principal_arns) > 0
+    error_message = "With admin_sso_permission_set = null, list at least one admin in extra_admin_principal_arns; otherwise no human can reach the cluster."
+  }
 }
 
 variable "system_node_group" {

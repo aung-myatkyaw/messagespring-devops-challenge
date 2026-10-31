@@ -38,13 +38,18 @@ variable "endpoint_public_access_cidrs" {
 
 # ------------------------------------------------------------------- access
 
-variable "admin_role_arns" {
-  description = "IAM roles granted cluster-admin through access entries (e.g. the SSO admin role and a break-glass role). Never CI roles."
+variable "admin_principal_arns" {
+  description = "IAM roles or users granted cluster-admin through access entries (e.g. the SSO admin role and a break-glass role). Never CI roles."
   type        = list(string)
 
   validation {
-    condition     = alltrue([for arn in var.admin_role_arns : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/", arn))])
-    error_message = "admin_role_arns must be IAM role ARNs (arn:aws:iam::<account>:role/...)."
+    condition     = length(var.admin_principal_arns) > 0
+    error_message = "admin_principal_arns needs at least one principal; cluster creator admin is off, so the cluster would have no human admin."
+  }
+
+  validation {
+    condition     = alltrue([for arn in var.admin_principal_arns : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/", arn))])
+    error_message = "admin_principal_arns must be IAM role or user ARNs (arn:aws:iam::<account>:role/... or :user/...)."
   }
 }
 

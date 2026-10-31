@@ -18,7 +18,11 @@ data "aws_region" "current" {}
 
 # Cluster admins: the IAM Identity Center role of the given permission set in
 # this account, looked up so no account-specific ARN is written in the repo.
+# Skipped when admin_sso_permission_set is null (an account without Identity
+# Center); admins then come only from extra_admin_principal_arns.
 data "aws_iam_roles" "sso_admin" {
+  count = var.admin_sso_permission_set == null ? 0 : 1
+
   name_regex  = "^AWSReservedSSO_${var.admin_sso_permission_set}_[0-9a-f]+$"
   path_prefix = "/aws-reserved/sso.amazonaws.com/"
 
@@ -47,7 +51,10 @@ locals {
     var.tags,
   )
 
-  admin_role_arns = concat(tolist(data.aws_iam_roles.sso_admin.arns), var.extra_admin_role_arns)
+  admin_principal_arns = concat(
+    flatten([for roles in data.aws_iam_roles.sso_admin : tolist(roles.arns)]),
+    var.extra_admin_principal_arns,
+  )
 
   # Every secret of this environment is a parameter under this path; External
   # Secrets may read only these.

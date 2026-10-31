@@ -9,7 +9,7 @@ module "eks" {
   control_plane_subnet_ids = module.network.intra_subnet_ids
 
   endpoint_public_access_cidrs = var.endpoint_public_access_cidrs
-  admin_role_arns              = local.admin_role_arns
+  admin_principal_arns         = local.admin_principal_arns
 
   # Platform nodes only; application nodes come from Karpenter.
   system_node_group = var.system_node_group
