@@ -1,0 +1,37 @@
+# Project for application teams. An Application in this project can only:
+#   - read this repository
+#   - deploy into the web namespace of this cluster
+#   - create the namespaced kinds listed below
+# It can't create cluster-scoped objects (CRDs, ClusterRoles, Namespaces) or
+# change its namespace's labels: the platform owns the namespace, including its
+# Pod Security level (k8s/platform/namespaces).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  description: Application workloads (namespaced resources only)
+  sourceRepos:
+    - https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: web
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - { group: apps, kind: Deployment }
+    - { group: "", kind: Service }
+    - { group: "", kind: ServiceAccount }
+    - { group: "", kind: ConfigMap }
+    - { group: networking.k8s.io, kind: Ingress }
+    - { group: networking.k8s.io, kind: NetworkPolicy }
+    - { group: autoscaling, kind: HorizontalPodAutoscaler }
+    - { group: policy, kind: PodDisruptionBudget }
+  # Show resources in the namespace that aren't in Git (e.g. created with
+  # kubectl) as warnings in the UI.
+  orphanedResources:
+    warn: true
+    # Created by Kubernetes in every namespace.
+    ignore:
+      - { kind: ServiceAccount, name: default }
+      - { kind: ConfigMap, name: kube-root-ca.crt }

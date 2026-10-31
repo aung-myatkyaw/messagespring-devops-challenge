@@ -1,0 +1,22 @@
+# Namespaces are owned by the platform, not by the apps deployed into them, so
+# an application team can't lower its own Pod Security level.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: web
+  labels:
+    # Reject pods that don't meet the "restricted" profile (non-root, no
+    # privilege escalation, dropped capabilities, seccomp). Pinned to the
+    # cluster's minor version, so an EKS upgrade can't start rejecting pods
+    # before the label is bumped on purpose.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.36
+    # The AWS Load Balancer Controller adds a readiness gate to pods here: a
+    # pod is Ready only once its ALB target is healthy (zero-downtime rollouts).
+    elbv2.k8s.aws/pod-readiness-gate-inject: enabled
+  annotations:
+    # Never delete a namespace because its file disappeared from Git: that
+    # would delete everything inside it.
+    argocd.argoproj.io/sync-options: Prune=false

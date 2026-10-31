@@ -52,10 +52,15 @@ repos:
         entry: hadolint
         language: system
         files: (^|/)Dockerfile$
-      # Raw manifests (e.g. Argo CD Applications); Helm templates are validated after rendering.
+      # Raw manifests (Argo CD Applications/AppProjects, Namespaces); Helm templates
+      # are validated after rendering (validate-k8s). CRD kinds are checked against
+      # the community CRD catalog, so a typo in an Application fails too.
       - id: kubeconform
         name: kubeconform (k8s schema validation)
-        entry: kubeconform -strict -summary -ignore-missing-schemas
+        entry: >-
+          kubeconform -strict -summary -kubernetes-version 1.36.0
+          -schema-location default
+          -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
         language: system
         files: ^k8s/.*\.ya?ml$
         exclude: ^k8s/(.*/)?(templates/|Chart\.yaml|values.*\.yaml)

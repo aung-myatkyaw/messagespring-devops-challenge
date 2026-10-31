@@ -1,0 +1,31 @@
+# Children of the root Application (infra/modules/argocd-bootstrap). Sync waves
+# order them; the root waits for each wave's Applications to be Healthy before
+# starting the next (Application health check in k8s/platform/argo-cd):
+#
+#   -10  argocd-projects  AppProjects
+#    -9  namespaces       Namespaces with Pod Security and readiness-gate labels
+#   (-8 .. -1 platform add-ons)
+#    10  web              the application
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-projects
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+  # No resources-finalizer: deleting this Application must not delete the
+  # AppProjects every other Application belongs to.
+spec:
+  project: root
+  source:
+    repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+    targetRevision: main
+    path: k8s/argocd/projects
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

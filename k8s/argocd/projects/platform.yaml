@@ -1,0 +1,30 @@
+# Project for cluster add-ons run by the platform team (Argo CD itself, the
+# AWS Load Balancer Controller, Karpenter, External Secrets, external-dns,
+# metrics-server, logging, namespaces).
+#
+# Add-ons install CRDs, webhooks and ClusterRoles, so cluster-scoped kinds are
+# allowed. The limit is on where charts may come from: this repository plus
+# each upstream chart repository, listed explicitly.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Cluster add-ons (cluster-scoped resources allowed)
+  sourceRepos:
+    - https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+    - https://argoproj.github.io/argo-helm
+    - https://aws.github.io/eks-charts
+    - https://kubernetes-sigs.github.io/external-dns
+    - https://charts.external-secrets.io
+    - https://kubernetes-sigs.github.io/metrics-server
+  # Any namespace of this cluster only. A namespace list would add little here:
+  # a project allowed to create ClusterRoleBindings can reach any namespace
+  # anyway. The real boundary for platform changes is review of the files that
+  # feed this project (k8s/platform, k8s/argocd).
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+  clusterResourceWhitelist:
+    - { group: "*", kind: "*" }

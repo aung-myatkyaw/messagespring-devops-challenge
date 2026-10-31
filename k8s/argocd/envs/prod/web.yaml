@@ -1,0 +1,35 @@
+# The web service: the local Helm chart with prod's values file. The image in
+# values-prod.yaml changes only through the promote-to-prod pull request, so
+# merging that PR is the production approval; Argo CD then rolls it out.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: web
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+  # Deleting this Application also deletes the app's resources (and so its
+  # ALB, through the load balancer controller).
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: apps
+  source:
+    repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+    targetRevision: main
+    path: k8s/charts/web
+    helm:
+      releaseName: web
+      # values.yaml is always applied first; this file overrides it.
+      valueFiles:
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: web
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Delete removed resources only after the new ones are healthy.
+      - PruneLast=true
