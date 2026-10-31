@@ -50,39 +50,14 @@ variable "admin_role_arns" {
 
 # -------------------------------------------------------------------- nodes
 
-variable "node_instance_types" {
-  description = "Instance types for the managed node group (x86_64). More than one widens the Spot pool."
-  type        = list(string)
-  default     = ["t3.large"]
-}
-
-variable "node_capacity_type" {
-  description = "ON_DEMAND or SPOT."
-  type        = string
-  default     = "ON_DEMAND"
-
-  validation {
-    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
-    error_message = "node_capacity_type must be ON_DEMAND or SPOT."
-  }
-}
-
-variable "node_min_size" {
-  description = "Minimum number of nodes."
-  type        = number
-  default     = 2
-}
-
-variable "node_max_size" {
-  description = "Maximum number of nodes."
-  type        = number
-  default     = 4
-}
-
-variable "node_desired_size" {
-  description = "Initial number of nodes. Terraform ignores later changes to it, so a cluster autoscaler can own it."
-  type        = number
-  default     = 2
+variable "system_node_group" {
+  description = "On-Demand managed node group for platform components (tainted CriticalAddonsOnly). Application nodes come from Karpenter. Terraform ignores later desired_size changes."
+  type = object({
+    instance_types = list(string)
+    min_size       = number
+    max_size       = number
+    desired_size   = number
+  })
 }
 
 variable "node_disk_size" {
@@ -113,9 +88,21 @@ variable "deletion_protection" {
 
 # ----------------------------------------------------- Pod Identity scoping
 
-variable "external_secrets_secret_arns" {
-  description = "Secrets Manager ARNs (wildcards allowed, e.g. an environment prefix) External Secrets may read."
+variable "external_secrets_parameter_arns" {
+  description = "SSM Parameter Store ARNs External Secrets may read (wildcards allowed, e.g. arn:aws:ssm:<region>:<account>:parameter/<project>/<env>/*)."
   type        = list(string)
+}
+
+variable "external_secrets_kms_key_arns" {
+  description = "Customer-managed KMS keys that encrypt those SecureString parameters (External Secrets gets kms:Decrypt on these only)."
+  type        = list(string)
+
+  # The community module falls back to kms:Decrypt on every key in every account
+  # when this list is empty.
+  validation {
+    condition     = length(var.external_secrets_kms_key_arns) > 0
+    error_message = "List at least one KMS key ARN; an empty list grants kms:Decrypt on all keys."
+  }
 }
 
 variable "loki_bucket_arns" {

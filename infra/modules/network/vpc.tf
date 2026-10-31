@@ -22,7 +22,7 @@ module "vpc" {
 
   # Subnet discovery for the AWS Load Balancer Controller.
   public_subnet_tags  = { "kubernetes.io/role/elb" = "1" }
-  private_subnet_tags = { "kubernetes.io/role/internal-elb" = "1" }
+  private_subnet_tags = merge({ "kubernetes.io/role/internal-elb" = "1" }, var.private_subnet_tags)
 
   # Flow logs for network forensics and troubleshooting (accepted/rejected traffic).
   enable_flow_log                                 = true

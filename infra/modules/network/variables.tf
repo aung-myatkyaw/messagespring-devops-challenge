@@ -37,6 +37,12 @@ variable "flow_log_retention_days" {
   default     = 30
 }
 
+variable "private_subnet_tags" {
+  description = "Extra tags for the private (node) subnets, e.g. karpenter.sh/discovery so Karpenter launches nodes there."
+  type        = map(string)
+  default     = {}
+}
+
 variable "tags" {
   description = "Extra tags for every resource in the module."
   type        = map(string)

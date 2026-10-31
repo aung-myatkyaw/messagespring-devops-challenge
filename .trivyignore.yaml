@@ -1,9 +1,14 @@
 # Accepted Trivy misconfiguration findings. Each one has a reason; anything not
 # listed here fails CI at HIGH/CRITICAL. Review when the cause changes.
+#
+# Paths point at the community EKS module's files only. Terraform downloads it
+# to .terraform/modules/eks when the wrapper module is scanned on its own, and to
+# .terraform/modules/eks.eks when an env root (module "eks") calls the wrapper.
 misconfigurations:
   - id: AWS-0104
     paths:
       - "**/modules/eks/node_groups.tf"
+      - "**/modules/eks.eks/node_groups.tf"
     statement: >-
       EKS node security group egress to 0.0.0.0/0 (community module default rule).
       Pods share the node security group and need HTTPS to AWS APIs, ECR and GitHub,
@@ -12,6 +17,7 @@ misconfigurations:
   - id: AWS-0038
     paths:
       - "**/modules/eks/main.tf"
+      - "**/modules/eks.eks/main.tf"
     statement: >-
       EKS scheduler and controller-manager logs are off on purpose: high volume, low
       value at this size. api, audit and authenticator logs are enabled.
@@ -29,3 +35,10 @@ misconfigurations:
       No versioning on Loki and ALB log buckets: append-only telemetry. Versioning would
       keep every chunk Loki's compactor deletes, so logs would outlive their retention.
       The Terraform state bucket is versioned.
+  - id: AWS-0342
+    paths:
+      - "**/modules/karpenter/policy.tf"
+    statement: >-
+      Karpenter's controller must pass its node role to EC2 to launch instances.
+      The community module scopes iam:PassRole to that single role and to
+      iam:PassedToService = ec2.amazonaws.com, so it can't hand out any other role.

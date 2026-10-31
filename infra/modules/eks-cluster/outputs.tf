@@ -44,6 +44,17 @@ output "pod_identity_role_arns" {
     aws_ebs_csi_driver           = module.ebs_csi_pod_identity.iam_role_arn
     aws_load_balancer_controller = module.aws_load_balancer_controller_pod_identity.iam_role_arn
     external_secrets             = module.external_secrets_pod_identity.iam_role_arn
+    karpenter                    = module.karpenter.iam_role_arn
     loki                         = module.loki_pod_identity.iam_role_arn
   }
+}
+
+output "karpenter_queue_name" {
+  description = "SQS queue with interruption events (Karpenter Helm value settings.interruptionQueue)."
+  value       = module.karpenter.queue_name
+}
+
+output "karpenter_node_role_name" {
+  description = "IAM role for nodes Karpenter launches (EC2NodeClass spec.role)."
+  value       = module.karpenter.node_iam_role_name
 }

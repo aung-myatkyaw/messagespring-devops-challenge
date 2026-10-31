@@ -44,8 +44,13 @@ module "eks" {
   deletion_protection = var.deletion_protection
 
   eks_managed_node_groups = local.node_groups
-  addons                  = local.addons
-  access_entries          = local.access_entries
+
+  # Karpenter's EC2NodeClass finds the node security group by this tag.
+  node_security_group_tags = {
+    "karpenter.sh/discovery" = var.name
+  }
+  addons         = local.addons
+  access_entries = local.access_entries
 
   tags = var.tags
 }

@@ -6,12 +6,13 @@
 # under k8s/platform/.
 #
 # external-dns has no AWS role: DNS is in Cloudflare, so it authenticates with a
-# Cloudflare API token that External Secrets syncs from Secrets Manager.
+# Cloudflare API token that External Secrets syncs from Parameter Store.
 
 locals {
   service_accounts = {
     aws_load_balancer_controller = { namespace = "kube-system", service_account = "aws-load-balancer-controller" }
     external_secrets             = { namespace = "external-secrets", service_account = "external-secrets" }
+    karpenter                    = { namespace = "kube-system", service_account = "karpenter" } # role in karpenter.tf
     loki                         = { namespace = "logging", service_account = "loki" }
   }
 }
@@ -50,10 +51,12 @@ module "external_secrets_pod_identity" {
 
   name = "${var.name}-external-secrets"
 
-  # Read-only, and only the secrets under this environment's prefix.
-  attach_external_secrets_policy        = true
-  external_secrets_secrets_manager_arns = var.external_secrets_secret_arns
-  external_secrets_create_permission    = false
+  # Read-only, only the parameters under this environment's path, and only the
+  # key that encrypts them.
+  attach_external_secrets_policy      = true
+  external_secrets_ssm_parameter_arns = var.external_secrets_parameter_arns
+  external_secrets_kms_key_arns       = var.external_secrets_kms_key_arns
+  external_secrets_create_permission  = false
 
   associations = {
     this = merge(local.service_accounts.external_secrets, { cluster_name = module.eks.cluster_name })

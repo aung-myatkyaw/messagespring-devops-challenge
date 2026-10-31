@@ -1,8 +1,10 @@
-# EKS cluster with one managed node group, wrapping the community EKS and
-# EKS Pod Identity modules with our defaults.
+# EKS cluster with a system node group and Karpenter for application nodes,
+# wrapping the community EKS (+ its Karpenter submodule) and EKS Pod Identity
+# modules with our defaults.
 #
 #   cluster.tf       the cluster itself: endpoint, encryption, logs, upgrade policy
-#   node-groups.tf   managed node group (AL2023, private subnets, IMDSv2 hop limit 1)
+#   node-groups.tf   "system" managed node group: On-Demand, tainted, for the platform
+#   karpenter.tf     Karpenter's IAM roles and Spot interruption queue
 #   addons.tf        EKS managed add-ons (VPC CNI with network policy, CoreDNS, ...)
 #   access.tf        who can use the Kubernetes API (access entries, no aws-auth)
 #   pod-identity.tf  IAM roles for in-cluster controllers, bound to service accounts
