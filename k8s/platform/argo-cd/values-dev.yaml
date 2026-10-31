@@ -1,0 +1,4 @@
+# dev: the defaults in values.yaml (one replica of each component on the
+# single system node). Losing Argo CD briefly only pauses syncing; running
+# workloads are unaffected.
+{}

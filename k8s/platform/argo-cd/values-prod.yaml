@@ -1,0 +1,18 @@
+# prod: two replicas of the stateless parts, spread over the two system nodes
+# (the chart's default soft pod anti-affinity), with PDBs so a node drain
+# during an upgrade keeps one of each running.
+#
+# The application controller stays at one replica: more only helps when
+# sharding many clusters. Redis is a cache; if it restarts, Argo CD rebuilds it.
+
+server:
+  replicas: 2
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+repoServer:
+  replicas: 2
+  pdb:
+    enabled: true
+    minAvailable: 1

@@ -1,0 +1,92 @@
+# Values for the argo-cd chart, shared by dev and prod (values-<env>.yaml holds
+# the differences). Used twice with the same files:
+#   1. infra/envs/<env>/bootstrap installs Argo CD with them once;
+#   2. the argo-cd Application then manages Argo CD from Git with them.
+
+global:
+  # Reached with `kubectl port-forward` only; there is no Ingress. Used for
+  # the links Argo CD generates.
+  domain: localhost:8080
+
+  # Platform node group only (tainted CriticalAddonsOnly); see
+  # infra/modules/eks-cluster/node-groups.tf.
+  nodeSelector:
+    role: system
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+      effect: NoSchedule
+
+configs:
+  cm:
+    # Off by default in the chart; kept explicit because exec gives a shell in
+    # any pod from the UI.
+    exec.enabled: false
+
+    # App-of-apps with sync waves: Argo CD has no health check for Application
+    # objects, so a wave would not wait for the previous wave's apps to be
+    # Healthy. This restores it (from the Argo CD docs).
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil then
+        if obj.status.health ~= nil then
+          hs.status = obj.status.health.status
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
+          end
+        end
+      end
+      return hs
+
+# No SSO is configured, so Dex would run for nothing. Access is the local admin
+# user over port-forward; next step: OIDC through IAM Identity Center.
+dex:
+  enabled: false
+
+# No notification channels (Slack, email) are configured yet.
+notifications:
+  enabled: false
+
+# Requests sized for one small system node in dev. Memory limits only: a CPU
+# limit throttles the repo server while rendering charts, for no benefit.
+controller:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+server:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+repoServer:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+applicationSet:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+redis:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
