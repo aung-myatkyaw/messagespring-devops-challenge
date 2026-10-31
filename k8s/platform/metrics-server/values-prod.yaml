@@ -1,0 +1,6 @@
+# prod: two replicas so the web HPA keeps getting metrics while a system node
+# is drained. The API server load-balances between them.
+replicas: 2
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

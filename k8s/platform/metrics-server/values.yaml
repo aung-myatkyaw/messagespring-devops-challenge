@@ -1,0 +1,16 @@
+# Values for the metrics-server chart. It serves the Metrics API (CPU and
+# memory per pod) that the HorizontalPodAutoscaler and `kubectl top` use.
+
+nodeSelector:
+  role: system
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+    effect: NoSchedule
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
