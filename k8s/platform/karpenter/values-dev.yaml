@@ -1,0 +1,9 @@
+# dev has one system node and the chart requires one replica per node
+# (required pod anti-affinity), so a second replica would stay Pending. If the
+# controller is down, running nodes keep running; only scaling pauses.
+replicas: 1
+
+settings:
+  clusterName: messagespring-dev
+  # SQS queue for Spot interruption and instance health events (Terraform).
+  interruptionQueue: messagespring-dev-karpenter

@@ -1,0 +1,23 @@
+# Values for the Karpenter chart (oci://public.ecr.aws/karpenter/karpenter),
+# shared by dev and prod; values-<env>.yaml sets the cluster.
+#
+# Karpenter runs on the system node group, never on nodes it manages (the
+# chart's default affinity already keeps it off Karpenter nodes). The CRDs come
+# from the chart's crds/ directory, which Argo CD applies and upgrades with it.
+
+# Must match the Pod Identity association (infra/modules/eks-cluster).
+serviceAccount:
+  name: karpenter
+
+# Added to the chart's kubernetes.io/os: linux. The chart already tolerates
+# CriticalAddonsOnly.
+nodeSelector:
+  role: system
+
+controller:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 512Mi

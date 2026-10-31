@@ -1,0 +1,7 @@
+# prod: two replicas (leader election) on the two system nodes, in different
+# zones (the chart's default topology spread).
+replicas: 2
+
+settings:
+  clusterName: messagespring-prod
+  interruptionQueue: messagespring-prod-karpenter

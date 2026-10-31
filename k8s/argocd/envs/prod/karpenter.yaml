@@ -1,0 +1,46 @@
+# Karpenter controller and its CRDs. It runs on the system node group and
+# launches the nodes for application pods (NodePool in karpenter-nodes).
+# The AWS side (IAM roles, interruption queue) is in Terraform.
+#
+# No resources-finalizer on platform add-ons: deleting the Application by
+# mistake leaves the controller running (for Karpenter, deleting its CRDs
+# would delete every NodePool and so every application node).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-7"
+spec:
+  project: platform
+  sources:
+    # Helm chart in an OCI registry (no oci:// prefix in Argo CD).
+    - repoURL: public.ecr.aws/karpenter
+      chart: karpenter
+      targetRevision: 1.15.1
+      helm:
+        releaseName: karpenter
+        valueFiles:
+          - $values/k8s/platform/karpenter/values.yaml
+          - $values/k8s/platform/karpenter/values-prod.yaml
+    - repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+      targetRevision: main
+      ref: values
+  # Same namespace as the Pod Identity association (kube-system/karpenter).
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    # First syncs can race with CRDs and webhooks that are still starting.
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
