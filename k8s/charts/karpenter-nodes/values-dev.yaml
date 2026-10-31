@@ -1,0 +1,25 @@
+# dev: Spot only, roughly 60-70% cheaper than On-Demand. Spot nodes can be
+# reclaimed with a two-minute warning (Karpenter drains them through the
+# interruption queue), so the pool is tainted: only workloads that tolerate
+# spot=true:NoSchedule run here (the web chart does in values-dev.yaml).
+clusterName: messagespring-dev
+environment: dev
+
+capacityTypes:
+  - spot
+
+taints:
+  - key: spot
+    value: "true"
+    effect: NoSchedule
+
+# Repack quickly; dev cares about cost more than about avoiding pod restarts.
+disruption:
+  consolidationPolicy: WhenEmptyOrUnderutilized
+  consolidateAfter: 1m
+  budgets:
+    - nodes: "1"
+
+limits:
+  cpu: "8"
+  memory: 32Gi

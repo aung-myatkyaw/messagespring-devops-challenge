@@ -15,7 +15,7 @@ cluster_log_retention_days   = 90
 deletion_protection          = true
 
 # Platform nodes (On-Demand), two AZs. Application nodes come from Karpenter:
-# On-Demand in prod (k8s/platform/karpenter).
+# On-Demand in prod (k8s/charts/karpenter-nodes).
 system_node_group = {
   instance_types = ["m7i.large"]
   min_size       = 2

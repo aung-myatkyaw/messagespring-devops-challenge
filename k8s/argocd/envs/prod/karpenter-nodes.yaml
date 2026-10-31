@@ -1,0 +1,25 @@
+# The EC2NodeClass and the "apps" NodePool (prod: On-Demand). After the
+# karpenter wave, so the CRDs exist.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter-nodes
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-6"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+    targetRevision: main
+    path: k8s/charts/karpenter-nodes
+    helm:
+      releaseName: karpenter-nodes
+      valueFiles:
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

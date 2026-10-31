@@ -1,0 +1,13 @@
+# prod: On-Demand only, no taint. The defaults in values.yaml apply
+# (consolidation after 5 minutes, one node at a time). Spot for part of prod
+# (a second, weighted NodePool) is an option once the service has enough
+# replicas to lose a node without noticing.
+clusterName: messagespring-prod
+environment: prod
+
+capacityTypes:
+  - on-demand
+
+limits:
+  cpu: "32"
+  memory: 128Gi

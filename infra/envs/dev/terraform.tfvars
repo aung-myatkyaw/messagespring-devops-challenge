@@ -15,7 +15,7 @@ cluster_log_retention_days   = 7
 deletion_protection          = false
 
 # Platform nodes (On-Demand). Application nodes come from Karpenter: Spot in dev
-# (k8s/platform/karpenter). One system node: dev's platform isn't highly available.
+# (k8s/charts/karpenter-nodes). One system node: dev's platform isn't highly available.
 system_node_group = {
   instance_types = ["t3.large"]
   min_size       = 1

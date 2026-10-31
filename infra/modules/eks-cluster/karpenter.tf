@@ -9,10 +9,11 @@
 #     recommendations, scheduled maintenance and instance state changes, so
 #     Karpenter drains a node before AWS reclaims it
 #
-# The controller itself (Helm chart) and its NodePool/EC2NodeClass objects are
-# installed by Argo CD from k8s/platform/karpenter. It runs on the system node
-# group, never on nodes it manages. The EC2NodeClass finds subnets and the node
-# security group by the tag karpenter.sh/discovery=<cluster name>.
+# The controller itself (Helm chart, values in k8s/platform/karpenter) and its
+# NodePool/EC2NodeClass objects (k8s/charts/karpenter-nodes) are installed by
+# Argo CD. It runs on the system node group, never on nodes it manages. The
+# EC2NodeClass finds subnets and the node security group by the tag
+# karpenter.sh/discovery=<cluster name>.
 
 module "karpenter" {
   source  = "terraform-aws-modules/eks/aws//modules/karpenter"

@@ -1,0 +1,53 @@
+# Defaults for both environments; values-<env>.yaml sets the cluster and the
+# differences (capacity type, taints, limits).
+
+# EKS cluster name. The node IAM role, subnets and node security group are
+# found from it (infra/modules/eks-cluster/karpenter.tf creates the role with a
+# fixed name and tags the subnets and security group karpenter.sh/discovery).
+clusterName: ""
+
+# Environment name for the cost allocation tag on instances.
+environment: ""
+
+# Amazon Linux 2023 EKS-optimized AMI, pinned to a release
+# (github.com/awslabs/amazon-eks-ami/releases). Karpenter picks the image for
+# the cluster's Kubernetes version. Changing this is a pull request; Karpenter
+# then sees the nodes as drifted and replaces them one at a time, within the
+# disruption budget below.
+amiAlias: al2023@v20261026
+
+# Root volume, encrypted (same size and type as the system node group).
+diskSize: 30Gi
+
+# On-Demand or Spot ("on-demand", "spot").
+capacityTypes:
+  - on-demand
+
+# Small and mid-size current-generation instances of the general purpose,
+# compute and memory families. A wide list gives Spot more pools to choose
+# from; the size cap keeps one node from holding too many pods.
+instanceCategories: [c, m, r]
+instanceGenerationGreaterThan: "5"
+instanceCPUs: ["2", "4", "8"]
+
+# Taints on every node of this pool; pods must tolerate them to land here.
+taints: []
+
+# Nodes are replaced after this long, so they don't drift far from the AMI and
+# configuration in Git, and never run for months unpatched.
+expireAfter: 720h
+
+disruption:
+  # Remove empty nodes and repack pods onto fewer or cheaper ones.
+  consolidationPolicy: WhenEmptyOrUnderutilized
+  consolidateAfter: 5m
+  # At most one node is voluntarily disrupted (consolidation, drift, expiry)
+  # at a time. Pods are evicted through the eviction API, so the web PDB holds.
+  budgets:
+    - nodes: "1"
+
+# The most this pool may launch in total: a ceiling on cost and on a runaway
+# scale-up (for example an HPA misconfiguration).
+limits:
+  cpu: "16"
+  memory: 64Gi

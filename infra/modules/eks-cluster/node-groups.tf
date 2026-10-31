@@ -9,8 +9,8 @@
 # on every node (VPC CNI, kube-proxy, Pod Identity agent, EBS CSI node, Alloy)
 # tolerate all taints.
 #
-# Application capacity comes from Karpenter (karpenter.tf): NodePools in
-# k8s/platform/karpenter decide On-Demand vs Spot per environment.
+# Application capacity comes from Karpenter (karpenter.tf): the NodePool in
+# k8s/charts/karpenter-nodes decides On-Demand vs Spot per environment.
 
 locals {
   node_groups = {

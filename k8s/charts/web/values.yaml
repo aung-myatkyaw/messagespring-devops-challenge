@@ -52,7 +52,7 @@ resources:
 probes:
   path: /api/health
 
-# Karpenter's NodePool for application pods (k8s/platform/karpenter-nodes).
+# Karpenter's NodePool for application pods (k8s/charts/karpenter-nodes).
 # Keeps the app off the system node group, which is tainted anyway.
 nodeSelector:
   karpenter.sh/nodepool: apps
