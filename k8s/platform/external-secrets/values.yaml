@@ -1,0 +1,50 @@
+# Values for the External Secrets Operator chart, the same in dev and prod. It
+# copies SecureString parameters from SSM Parameter Store into Kubernetes
+# Secrets (ClusterSecretStore in manifests/). Its IAM role (Pod Identity) can
+# read only this environment's /messagespring/<env>/ parameters and decrypt
+# only with that environment's KMS key.
+#
+# Three Deployments: the controller, a validating webhook for ExternalSecret
+# and SecretStore objects, and a cert controller that issues and renews the
+# webhook's certificate (so Argo CD sees no generated certificates to diff).
+
+# All three on the system node group.
+global:
+  nodeSelector:
+    role: system
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+      effect: NoSchedule
+
+# Must match the Pod Identity association (infra/modules/eks-cluster).
+serviceAccount:
+  name: external-secrets
+
+# Read-only use: nothing is pushed back to Parameter Store (the IAM role can't
+# write either).
+processPushSecret: false
+processClusterPushSecret: false
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
+
+webhook:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+certController:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
