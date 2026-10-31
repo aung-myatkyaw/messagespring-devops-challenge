@@ -44,7 +44,7 @@ repos:
       - id: conventional-pre-commit
         stages: [commit-msg]
 
-  # Tools installed locally (brew install hadolint kubeconform)
+  # Tools installed locally (brew install hadolint kubeconform helm)
   - repo: local
     hooks:
       - id: hadolint
@@ -59,3 +59,11 @@ repos:
         language: system
         files: ^k8s/.*\.ya?ml$
         exclude: ^k8s/(.*/)?(templates/|Chart\.yaml|values.*\.yaml)
+      # Local Helm charts: lint and render with every values-<env>.yaml, then
+      # schema-check the output (same script as CI).
+      - id: validate-k8s
+        name: validate-k8s (helm lint + template | kubeconform)
+        entry: scripts/validate-k8s.sh
+        language: system
+        files: ^(k8s/charts/|scripts/validate-k8s\.sh$)
+        pass_filenames: false

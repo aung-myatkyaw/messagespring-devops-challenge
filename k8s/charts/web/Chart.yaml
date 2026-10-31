@@ -1,0 +1,7 @@
+apiVersion: v2
+name: web
+description: Next.js web service (Hello World page and /api/health), deployed by Argo CD
+type: application
+# Chart version: bump when the templates change. The image version is not
+# here; CI writes it to values-<env>.yaml.
+version: 0.1.0

@@ -1,0 +1,50 @@
+{{- if .Values.ingress.enabled }}
+# The AWS Load Balancer Controller turns this into an internet-facing ALB:
+#   - HTTPS on 443 with the ACM certificate whose name matches the host (found
+#     by the controller from spec.tls; no certificate ARN in Git)
+#   - HTTP on 80 only redirects to HTTPS
+#   - external-dns creates the Cloudflare record for the host
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "web.labels" . | nindent 4 }}
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # Register pod IPs directly (no NodePort hop), which also makes the pod
+    # readiness gate possible.
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/healthcheck-path: {{ .Values.probes.path }}
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "10"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds={{ .Values.ingress.deregistrationDelaySeconds }}
+    # Access logs to S3; the prefix must be "alb" (the bucket policy only lets
+    # the ELB service write under alb/AWSLogs/<account-id>/).
+    alb.ingress.kubernetes.io/load-balancer-attributes: >-
+      access_logs.s3.enabled=true,access_logs.s3.bucket={{ required "ingress.accessLogsBucket is required" .Values.ingress.accessLogsBucket }},access_logs.s3.prefix=alb,routing.http.drop_invalid_header_fields.enabled=true
+    # DNS only (grey cloud): Cloudflare doesn't proxy, so the ALB terminates TLS
+    # with the ACM certificate.
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+spec:
+  ingressClassName: alb
+  tls:
+    - hosts:
+        - {{ required "ingress.host is required" .Values.ingress.host | quote }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}
+                port:
+                  name: http
+{{- end }}

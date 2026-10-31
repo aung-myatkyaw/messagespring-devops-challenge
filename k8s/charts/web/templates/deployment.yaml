@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "web.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  # Rollback is `git revert`, not `kubectl rollout undo`, so few old
+  # ReplicaSets are kept.
+  revisionHistoryLimit: 3
+  minReadySeconds: {{ .Values.minReadySeconds }}
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.rollingUpdate.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "web.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "web.labels" . | nindent 8 }}
+    spec:
+      # No readinessGates here: the AWS Load Balancer Controller injects one
+      # into pods of namespaces labelled elbv2.k8s.aws/pod-readiness-gate-inject
+      # (set by the Argo CD Application). A new pod then counts as Ready only
+      # once its ALB target is healthy, so with maxUnavailable 0 the rollout
+      # never removes old pods before the ALB can reach the new ones.
+      serviceAccountName: {{ .Release.Name }}
+      # The app never calls the Kubernetes API.
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      # Meets the Pod Security "restricted" profile enforced on the namespace.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532   # "nonroot" in the distroless image
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: {{ .Values.topologySpread.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "web.selectorLabels" . | nindent 14 }}
+          # Count only pods of the same ReplicaSet, so a rollout isn't blocked
+          # by the old version's pods.
+          matchLabelKeys:
+            - pod-template-hash
+      containers:
+        - name: web
+          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # startup: allows up to 60s for the first start; liveness and
+          # readiness only begin after it succeeds.
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          # readiness: removes the pod from the Service and the ALB quickly.
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # liveness: restarts a hung process; slower so a brief stall doesn't
+          # cause a restart.
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: {{ .Values.preStopSleepSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # The only writable path (Next.js image/data cache).
+            - name: next-cache
+              mountPath: /app/.next/cache
+      volumes:
+        - name: next-cache
+          emptyDir:
+            sizeLimit: 256Mi

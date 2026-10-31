@@ -1,0 +1,37 @@
+# dev: small and cheap, on Spot. Compare with values-prod.yaml.
+
+# Written by CI after every build on main; the same image is promoted to prod
+# through a pull request that edits values-prod.yaml (ECR tags are immutable,
+# so a tag always means the same image). 123456789012 is a placeholder account
+# ID until the first build.
+image:
+  repository: 123456789012.dkr.ecr.ap-southeast-7.amazonaws.com/messagespring/web
+  tag: "0000000"
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 2
+
+# One or two pods don't need a node per zone.
+topologySpread:
+  whenUnsatisfiable: ScheduleAnyway
+
+# dev's Karpenter NodePool is Spot-only and tainted spot=true:NoSchedule, so
+# only workloads that accept interruption land there.
+tolerations:
+  - key: spot
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+
+ingress:
+  host: messagespring-dev.example.com
+  # infra/envs/dev output alb_logs_bucket_name (placeholder account ID).
+  accessLogsBucket: messagespring-dev-alb-logs-123456789012-ap-southeast-7
+
+networkPolicy:
+  # Public subnets of the dev VPC (infra/envs/dev output public_subnet_cidrs).
+  albSourceCidrs:
+    - 10.10.48.0/24
+    - 10.10.49.0/24
+    - 10.10.50.0/24

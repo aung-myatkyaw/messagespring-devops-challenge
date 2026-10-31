@@ -1,0 +1,14 @@
+# Limits voluntary disruptions (node drains, Karpenter consolidation, EKS
+# upgrades) to one pod at a time. maxUnavailable rather than minAvailable: with
+# a single replica (dev) minAvailable: 1 would block every drain forever.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "web.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "web.selectorLabels" . | nindent 6 }}

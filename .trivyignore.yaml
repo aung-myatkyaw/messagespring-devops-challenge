@@ -42,3 +42,23 @@ misconfigurations:
       Karpenter's controller must pass its node role to EC2 to launch instances.
       The community module scopes iam:PassRole to that single role and to
       iam:PassedToService = ec2.amazonaws.com, so it can't hand out any other role.
+  # --- k8s/charts/web (scanned with --helm-values values-<env>.yaml) ---
+  - id: KSV-0011
+    paths:
+      - "**/charts/web/templates/deployment.yaml"
+    statement: >-
+      No CPU limit on purpose: a CPU limit throttles Node.js under load even when the
+      node has spare CPU (CFS quota). The pod has a CPU request for scheduling and a
+      memory limit, which is the resource that can actually hurt neighbours.
+  - id: KSV-0110
+    paths:
+      - "**/charts/web/templates/deployment.yaml"
+    statement: >-
+      The chart doesn't hard-code a namespace; the Argo CD Application installs it into
+      the web namespace (helm template --namespace). Trivy renders it without one.
+  - id: KSV-0125
+    paths:
+      - "**/charts/web/templates/deployment.yaml"
+    statement: >-
+      The image comes from our own private ECR repository (immutable tags, scan on push,
+      KMS-encrypted), which isn't on Trivy's list of well-known public registries.

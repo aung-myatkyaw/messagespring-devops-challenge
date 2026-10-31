@@ -1,0 +1,29 @@
+{{- if .Values.hpa.enabled }}
+# CPU-based autoscaling (metrics-server). Karpenter adds nodes when new pods
+# don't fit.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "web.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.targetCPUUtilizationPercentage }}
+  behavior:
+    # Scale up straight away; scale down only after 5 minutes of low load, so
+    # a short dip doesn't remove pods that are needed again a minute later.
+    scaleDown:
+      stabilizationWindowSeconds: 300
+{{- end }}

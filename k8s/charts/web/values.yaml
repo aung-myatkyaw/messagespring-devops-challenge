@@ -1,0 +1,83 @@
+# Defaults for every environment. values-<env>.yaml holds only what differs,
+# including the image, which CI writes there.
+
+image:
+  # Set per environment by CI (repository and tag together); see values-dev.yaml.
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Ignored while the HPA is enabled: the HPA owns the replica count, and the
+# Deployment leaves spec.replicas out so Argo CD doesn't reset it on every sync.
+replicaCount: 2
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+# Rolling update tuned for zero downtime behind the ALB:
+#   maxUnavailable 0  never remove a serving pod before its replacement is Ready
+#   maxSurge 1        one extra pod at a time (Karpenter adds capacity if needed)
+#   minReadySeconds   a new pod must stay Ready this long before the next step,
+#                     catching pods that pass one probe and then crash
+#   progressDeadline  after this, the rollout is marked failed and Argo CD shows Degraded
+rollingUpdate:
+  maxSurge: 1
+  maxUnavailable: 0
+minReadySeconds: 10
+progressDeadlineSeconds: 300
+
+# preStop sleep keeps the pod serving while the ALB deregisters it: endpoint
+# removal and ALB deregistration happen in parallel with SIGTERM, so without
+# the sleep the ALB can still send requests to a process that has exited.
+# Native sleep action (Kubernetes 1.30+): the distroless image has no shell.
+# It must be shorter than terminationGracePeriodSeconds.
+preStopSleepSeconds: 15
+terminationGracePeriodSeconds: 30
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    # Memory limit only: a CPU limit would throttle Node.js under load even
+    # when the node has spare CPU.
+    memory: 384Mi
+
+# Every probe hits the same shallow endpoint as the ALB health check. It
+# doesn't call dependencies, so an outage elsewhere can't make liveness
+# restart every pod.
+probes:
+  path: /api/health
+
+# Karpenter's NodePool for application pods (k8s/platform/karpenter-nodes).
+# Keeps the app off the system node group, which is tainted anyway.
+nodeSelector:
+  karpenter.sh/nodepool: apps
+
+tolerations: []
+
+# Spread replicas over zones. DoNotSchedule makes Karpenter launch a node in
+# another zone; ScheduleAnyway allows packing when that isn't worth it (dev).
+topologySpread:
+  whenUnsatisfiable: DoNotSchedule
+
+service:
+  port: 80
+
+ingress:
+  enabled: true
+  host: ""
+  # S3 bucket from infra (module log-storage, output alb_logs_bucket_name).
+  accessLogsBucket: ""
+  # ALB deregistration delay. Longer than preStopSleepSeconds isn't needed:
+  # the pod keeps serving during the sleep.
+  deregistrationDelaySeconds: 30
+
+networkPolicy:
+  enabled: true
+  # The public subnets, where the ALB's network interfaces live. With
+  # target-type ip the ALB connects straight to pod IPs from these addresses.
+  albSourceCidrs: []
