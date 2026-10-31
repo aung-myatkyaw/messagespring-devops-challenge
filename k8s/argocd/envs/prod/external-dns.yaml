@@ -1,0 +1,35 @@
+# external-dns (Cloudflare) and the ExternalSecret holding its API token.
+# After external-secrets, so the CRD and the ClusterSecretStore exist.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-dns
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+spec:
+  project: platform
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/external-dns
+      chart: external-dns
+      targetRevision: 1.23.0
+      helm:
+        releaseName: external-dns
+        valueFiles:
+          - $values/k8s/platform/external-dns/values.yaml
+          - $values/k8s/platform/external-dns/values-prod.yaml
+    - repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+      targetRevision: main
+      path: k8s/platform/external-dns/manifests/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-dns
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

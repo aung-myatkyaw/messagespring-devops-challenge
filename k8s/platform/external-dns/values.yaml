@@ -1,0 +1,44 @@
+# Values for the external-dns chart, shared by dev and prod; values-<env>.yaml
+# sets the zone and owner. It creates the Cloudflare DNS record for each
+# Ingress host, pointing at the ALB.
+
+provider:
+  name: cloudflare
+
+# Zone-scoped API token (Zone:Read + DNS:Edit on one zone), synced from
+# Parameter Store by the ExternalSecret in manifests/<env>/. Cloudflare has no
+# workload identity federation, so this is a token rather than an IAM role.
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: api-token
+
+# Only Ingress hosts; nothing uses Services of type LoadBalancer.
+sources:
+  - ingress
+
+# sync: also deletes records when their Ingress goes away. Safe because
+# external-dns only touches records it owns, marked by a TXT record with this
+# cluster's txtOwnerId; records made by hand or by the other cluster are left
+# alone.
+policy: sync
+registry: txt
+
+# Records stay DNS only (not proxied by Cloudflare); the Ingress also sets
+# external-dns.alpha.kubernetes.io/cloudflare-proxied: "false".
+
+nodeSelector:
+  role: system
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+    effect: NoSchedule
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
