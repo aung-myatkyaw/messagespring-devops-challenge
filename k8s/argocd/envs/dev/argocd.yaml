@@ -1,0 +1,41 @@
+# Argo CD manages itself from Git. Terraform (infra/envs/dev/bootstrap)
+# installed it once with the same chart version, release name and values
+# files, so taking over changes nothing; from then on an upgrade is a pull
+# request that bumps targetRevision here.
+#
+# No resources-finalizer: deleting this Application must never uninstall
+# Argo CD.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-8"
+spec:
+  project: platform
+  # Multi-source: the upstream chart, with values files from this repository
+  # (the second source, referred to as $values).
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-cd
+      targetRevision: 10.11.6
+      helm:
+        releaseName: argocd
+        valueFiles:
+          - $values/k8s/platform/argo-cd/values.yaml
+          - $values/k8s/platform/argo-cd/values-dev.yaml
+    - repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Its CRDs are too large for client-side apply (the last-applied
+      # annotation is limited to 256 KiB).
+      - ServerSideApply=true
