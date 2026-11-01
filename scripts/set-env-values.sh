@@ -40,17 +40,8 @@ suffix="$account-$region"
 
 cd "$(git rev-parse --show-toplevel)"
 
-# Replaces the value on one "key: value" line, and fails unless the key appears
-# exactly once. Line-based on purpose: yq rewrites the whole file and drops its
-# blank lines.
-set_value() {
-  local file=$1 key=$2 value=$3
-  if [[ $(grep -cE "^${key}" "$file") != 1 ]]; then
-    echo "expected exactly one '${key}' line in $file" >&2
-    exit 1
-  fi
-  sed -E "s|^(${key}).*|\1${value}|" "$file" >"$file.tmp" && mv "$file.tmp" "$file"
-}
+# shellcheck source=scripts/lib/set-value.sh
+source "scripts/lib/set-value.sh"
 
 web="k8s/charts/web/values-$env.yaml"
 loki="k8s/platform/loki/values-$env.yaml"
