@@ -1,0 +1,142 @@
+# Daily re-scan of the images dev and prod are actually running.
+#
+# The build gate only knows about vulnerabilities published before the image
+# was built. New CVEs (and new fixes for old ones) appear every day, so this
+# scans the image each environment points at in Git and keeps one issue per
+# environment up to date: opened when fixable HIGH/CRITICAL findings appear,
+# updated while they remain, closed by the first clean scan. The fix is a new
+# release, which replaces the image in dev and, through its promote PR, prod.
+#
+# Runs only once the read-only scan role is configured (variable
+# ECR_SCAN_ROLE_ARN, see docs/runbooks/github-setup.md).
+name: image rescan
+
+on:
+  schedule:
+    - cron: "0 1 * * *" # 08:00 in Bangkok
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  rescan:
+    name: rescan ${{ matrix.environment }}
+    if: vars.ECR_SCAN_ROLE_ARN != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # AWS OIDC
+      issues: write # the findings issue
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, prod]
+    env:
+      ENVIRONMENT: ${{ matrix.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Git is the source of truth for what runs: read the image from the
+      # environment's values file. Placeholders mean nothing is released yet.
+      - name: Image running in ${{ matrix.environment }}
+        id: image
+        run: |
+          values="k8s/charts/web/values-${ENVIRONMENT}.yaml"
+          repository=$(yq '.image.repository' "$values")
+          tag=$(yq '.image.tag' "$values")
+          if [[ ! $repository =~ ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[a-z0-9._/-]+$ ||
+                ! $tag =~ ^[0-9a-f]{7,40}$ ||
+                $repository == 123456789012.* || $tag == 0000000 ]]; then
+            echo "::notice::$ENVIRONMENT has no released image yet ($repository:$tag); nothing to scan"
+            echo "scan=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "scan=true" >>"$GITHUB_OUTPUT"
+          echo "ref=$repository:$tag" >>"$GITHUB_OUTPUT"
+
+      # Pull-only role: it can read images but not push them.
+      - name: Configure AWS credentials (OIDC)
+        if: steps.image.outputs.scan == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.ECR_SCAN_ROLE_ARN }}
+          role-session-name: gha-rescan-${{ github.run_id }}-${{ matrix.environment }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-southeast-7' }}
+
+      - name: Install Trivy
+        if: steps.image.outputs.scan == 'true'
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.76.1 # same as the build gate in _docker.yaml
+
+      # Trivy authenticates to ECR with the AWS credentials above and pulls
+      # straight from the registry. Same threshold as the build gate.
+      - name: Scan
+        id: scan
+        if: steps.image.outputs.scan == 'true'
+        env:
+          REF: ${{ steps.image.outputs.ref }}
+        run: |
+          trivy image --image-src remote --severity HIGH,CRITICAL --ignore-unfixed \
+            --format json --output report.json "$REF"
+          trivy convert --format table --output report.txt report.json
+          count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' report.json)
+          echo "count=$count" >>"$GITHUB_OUTPUT"
+          cat report.txt
+          {
+            echo "### $ENVIRONMENT: \`$REF\`"
+            echo "$count fixable HIGH/CRITICAL vulnerabilities."
+          } >>"$GITHUB_STEP_SUMMARY"
+          if ((count > 0)); then
+            echo "::warning::$count fixable HIGH/CRITICAL vulnerabilities in the image $ENVIRONMENT runs"
+          fi
+
+      - name: Open, update or close the issue
+        if: steps.image.outputs.scan == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF: ${{ steps.image.outputs.ref }}
+          COUNT: ${{ steps.scan.outputs.count }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Vulnerable image running in $ENVIRONMENT"
+          number=$(gh issue list --state open --label vulnerability --limit 100 --json number,title |
+            jq -r --arg title "$title" 'map(select(.title == $title)) | .[0].number // empty')
+
+          if ((COUNT == 0)); then
+            if [[ -n $number ]]; then
+              gh issue close "$number" --comment "Clean rescan of \`$REF\` ([run]($RUN_URL)). Closing."
+            fi
+            exit 0
+          fi
+
+          {
+            echo "The daily rescan found **$COUNT** fixable HIGH/CRITICAL vulnerabilities in \`$REF\`, the image **$ENVIRONMENT** is running ([run]($RUN_URL), $(date -u '+%Y-%m-%d %H:%M UTC'))."
+            echo
+            echo "The build gate passed this image, so these were published, or got a fix, after it was built."
+            echo "To fix: update the base image or the affected dependencies and release. This issue is updated"
+            echo "by every rescan and closes itself after the first clean one."
+            echo
+            echo "<details><summary>Findings</summary>"
+            echo
+            echo '```text'
+            head -c 60000 report.txt # issue bodies are limited to 65536 characters
+            echo '```'
+            echo "</details>"
+          } >"$RUNNER_TEMP/issue.md"
+
+          if [[ -z $number ]]; then
+            gh label create vulnerability --color B60205 \
+              --description "Found by the image rescan" --force
+            gh issue create --title "$title" --label vulnerability --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue edit "$number" --body-file "$RUNNER_TEMP/issue.md"
+          fi

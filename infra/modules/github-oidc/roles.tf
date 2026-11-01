@@ -3,6 +3,7 @@ locals {
   role_subjects = merge(
     {
       ecr-push   = "${local.sub_prefix}:ref:refs/heads/main"
+      ecr-scan   = "${local.sub_prefix}:ref:refs/heads/main"
       infra-plan = "${local.sub_prefix}:pull_request"
     },
     { for env in var.apply_environments : "infra-apply-${env}" => "${local.sub_prefix}:environment:${env}" },
@@ -53,6 +54,15 @@ resource "aws_iam_role_policy" "ecr_push" {
   name   = "ecr-push"
   role   = aws_iam_role.this["ecr-push"].id
   policy = data.aws_iam_policy_document.ecr_push.json
+}
+
+# ---------------------------------------------------------------- ecr-scan
+
+# The daily rescan pulls the running images; it gets no push rights.
+resource "aws_iam_role_policy" "ecr_scan" {
+  name   = "ecr-pull"
+  role   = aws_iam_role.this["ecr-scan"].id
+  policy = data.aws_iam_policy_document.ecr_scan.json
 }
 
 # -------------------------------------------------------------- infra-plan
