@@ -26,7 +26,7 @@ variable "apply_policy_arn" {
 }
 
 variable "ecr_repository_arns" {
-  description = "ECR repositories the ecr-push role may push to and the ecr-scan role may pull from."
+  description = "ECR repositories the ecr-push role may push to."
   type        = list(string)
 }
 

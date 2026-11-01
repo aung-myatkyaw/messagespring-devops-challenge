@@ -3,7 +3,6 @@
 # the token's `sub` claim:
 #
 #   ecr-push              repo:<owner>/<repo>:ref:refs/heads/main    push images from main only
-#   ecr-scan              repo:<owner>/<repo>:ref:refs/heads/main    pull images for the daily rescan
 #   infra-plan            repo:<owner>/<repo>:pull_request           read-only plan on PRs
 #   infra-apply-<env>     repo:<owner>/<repo>:environment:<env>      apply, behind a GitHub Environment
 #
