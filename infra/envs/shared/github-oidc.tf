@@ -3,8 +3,10 @@
 module "github_oidc" {
   source = "../../modules/github-oidc"
 
-  name              = var.project
-  github_repository = var.github_repository
+  name                 = var.project
+  github_repository    = var.github_repository
+  github_owner_id      = var.github_owner_id
+  github_repository_id = var.github_repository_id
 
   ecr_repository_arns = [module.ecr.repository_arn]
 

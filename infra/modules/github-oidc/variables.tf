@@ -13,6 +13,20 @@ variable "github_repository" {
   }
 }
 
+# The IDs are public (GitHub API) and never change. Get them with:
+#   gh api repos/<owner>/<repo> --jq '.owner.id, .id'
+# or read the whole prefix GitHub uses:
+#   gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix
+variable "github_owner_id" {
+  description = "Numeric ID of the repository owner (user or organisation), part of the immutable OIDC subject."
+  type        = number
+}
+
+variable "github_repository_id" {
+  description = "Numeric ID of the repository, part of the immutable OIDC subject."
+  type        = number
+}
+
 variable "apply_environments" {
   description = "GitHub Environments that run terraform apply; one role each (infra-apply-<env>)."
   type        = list(string)
