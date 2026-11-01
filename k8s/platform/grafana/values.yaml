@@ -1,0 +1,54 @@
+# Values for the Grafana chart (grafana-community repository), the same in
+# dev and prod. Grafana is internal only: no Ingress, reached with
+#   kubectl -n logging port-forward svc/grafana 3000:80
+#
+# Stateless: the Loki data source is provisioned from this file and nothing is
+# kept on a volume, so a restart or a new pod changes nothing that matters.
+# (Dashboards would be provisioned the same way, from ConfigMaps in Git.)
+
+# The admin password comes from Parameter Store through the ExternalSecret in
+# manifests/<env>/. The chart must not generate one: Argo CD renders the chart
+# on every refresh, so a generated password would change each time.
+admin:
+  existingSecret: grafana-admin
+  userKey: admin-user
+  passwordKey: admin-password
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://loki.logging.svc.cluster.local:3100
+        isDefault: true
+        editable: false
+
+grafana.ini:
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+  # Next step: sign-in through IAM Identity Center (OIDC) instead of the
+  # local admin user.
+  auth.anonymous:
+    enabled: false
+
+nodeSelector:
+  role: system
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+    effect: NoSchedule
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+# Helm test pod; Argo CD doesn't run Helm tests.
+testFramework:
+  enabled: false

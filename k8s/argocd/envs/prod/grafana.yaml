@@ -1,0 +1,34 @@
+# Grafana with the Loki data source, and the ExternalSecret holding its admin
+# password (third source).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: platform
+  sources:
+    - repoURL: https://grafana-community.github.io/helm-charts
+      chart: grafana
+      targetRevision: 14.2.0
+      helm:
+        releaseName: grafana
+        valueFiles:
+          - $values/k8s/platform/grafana/values.yaml
+    - repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+      targetRevision: main
+      path: k8s/platform/grafana/manifests/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
