@@ -8,6 +8,11 @@ output "ecr_push_role_arn" {
   value       = aws_iam_role.this["ecr-push"].arn
 }
 
+output "ecr_scan_role_arn" {
+  description = "Pull-only role for the daily image rescan (GitHub variable ECR_SCAN_ROLE_ARN)."
+  value       = aws_iam_role.this["ecr-scan"].arn
+}
+
 output "infra_plan_role_arn" {
   description = "Read-only role for terraform plan on pull requests."
   value       = aws_iam_role.this["infra-plan"].arn

@@ -22,6 +22,23 @@ data "aws_iam_policy_document" "ecr_push" {
   }
 }
 
+data "aws_iam_policy_document" "ecr_scan" {
+  statement {
+    sid       = "EcrLogin"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "PullFromAppRepositories"
+    actions = [
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
+    ]
+    resources = var.ecr_repository_arns
+  }
+}
+
 # Plans read state and take the lock: with S3 native locking the lock is a
 # `<key>.tflock` object written next to the state, so plan needs Put/Delete on
 # those objects only. Objects are encrypted with the state KMS key.
