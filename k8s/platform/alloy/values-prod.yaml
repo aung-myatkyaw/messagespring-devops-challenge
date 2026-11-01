@@ -1,0 +1,5 @@
+alloy:
+  # Added to every log line as the "cluster" label.
+  extraEnv:
+    - name: CLUSTER_NAME
+      value: messagespring-prod

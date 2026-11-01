@@ -1,0 +1,15 @@
+# The one documented Pod Security exception: Alloy reads container log files
+# from the node (hostPath /var/log, read-only) as root, which even the
+# "baseline" profile forbids. It's isolated in a namespace holding only the
+# Alloy DaemonSet, so nothing else gets that latitude. Its container still
+# drops all capabilities, can't escalate privileges, and has a read-only root
+# filesystem (k8s/platform/alloy/values.yaml).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: alloy
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: v1.36
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
