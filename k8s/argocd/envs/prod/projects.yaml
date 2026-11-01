@@ -11,7 +11,8 @@
 #        metrics-server                Metrics API for the HPA
 #    -4  external-secrets              operator + ClusterSecretStore
 #    -3  external-dns                  Cloudflare records for Ingress hosts
-#   (-2 .. -1 logging)
+#    -2  loki                          log storage (S3)
+#    -1  alloy, grafana                log agent per node; log UI
 #    10  web                           the application
 
 apiVersion: argoproj.io/v1alpha1
