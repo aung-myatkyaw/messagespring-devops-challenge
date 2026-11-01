@@ -1,0 +1,14 @@
+# Loki and Grafana. Both meet the "restricted" profile (checked on the
+# rendered charts). The log agent, which needs host access, runs in its own
+# namespace (alloy.yaml) so this one can stay restricted.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logging
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.36
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false

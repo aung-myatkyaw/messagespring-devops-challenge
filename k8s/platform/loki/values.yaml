@@ -1,0 +1,113 @@
+# Values for the Loki chart (grafana-community repository), shared by dev and
+# prod; values-<env>.yaml sets the buckets and retention.
+#
+# Monolithic mode: every Loki component in one process (one StatefulSet pod).
+# Right for one small service (Grafana suggests it up to roughly 20 GB/day).
+# The storage layout in S3 is the same in every mode, so moving to the
+# distributed mode later is a redeploy, not a data migration.
+deploymentMode: Monolithic
+
+loki:
+  # One tenant: there is one team and one cluster per Loki. Multi-tenancy
+  # (X-Scope-OrgID) would need an authenticating gateway in front.
+  auth_enabled: false
+
+  # One replica, so one copy of each stream. The write-ahead log on the
+  # persistent volume covers a pod restart; losing the volume and the pod
+  # together loses the last unflushed minutes of logs (accepted for cost; HA
+  # means three replicas with replication_factor 3).
+  commonConfig:
+    replication_factor: 1
+
+  # TSDB index, schema v13 (current). Index files are shipped to S3 with the
+  # chunks, so there's no separate index database. A schema change later is a
+  # new entry with a future "from" date, never an edit of this one.
+  schemaConfig:
+    configs:
+      - from: "2026-10-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+  # S3 through the pod's IAM role (EKS Pod Identity, role
+  # <cluster>-loki): no access keys. The buckets encrypt with their KMS key by
+  # default, so Loki doesn't set SSE itself.
+  storage:
+    type: s3
+    s3:
+      region: ap-southeast-7
+
+  # The compactor (inside the single binary) enforces retention: it deletes
+  # expired chunks and keeps the index consistent. The bucket lifecycle rule in
+  # Terraform expires objects a week later, only as a safety net; if S3 deleted
+  # first, the index would point at missing chunks.
+  compactor:
+    retention_enabled: true
+    delete_request_store: s3
+
+  # No usage statistics sent to Grafana Labs.
+  analytics:
+    reporting_enabled: false
+
+singleBinary:
+  replicas: 1
+  # Write-ahead log, compactor working files and the TSDB index cache, on an
+  # encrypted gp3 volume (default StorageClass, k8s/platform/storage).
+  persistence:
+    enabled: true
+    size: 10Gi
+  nodeSelector:
+    role: system
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+      effect: NoSchedule
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+# Must match the Pod Identity association (infra/modules/eks-cluster).
+serviceAccount:
+  name: loki
+
+# The chart defaults the simple scalable targets to three replicas each; in
+# Monolithic mode they must be zero (the chart refuses to render otherwise).
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Not needed at this size:
+#   gateway        nginx in front of Loki; only useful for multi-tenant auth or
+#                  routing between components. Clients use the loki Service.
+#   memcached      chunk and results caches; the chunks cache alone requests
+#                  gigabytes of memory by default.
+#   canary, test   synthetic log writers and Helm test pods.
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+memcached:
+  enabled: false
+
+# The rules sidecar loads alerting rules from labelled ConfigMaps, and for that
+# the chart grants Loki read access to every ConfigMap and Secret in the
+# cluster. No alerting rules are defined yet, so it stays off (and so does
+# that ClusterRole).
+sidecar:
+  rules:
+    enabled: false

@@ -1,0 +1,10 @@
+# Buckets from infra/envs/dev (log-storage module). Account ID 123456789012 is
+# a placeholder until scripts/set-env-values.sh writes the real one.
+loki:
+  storage:
+    bucketNames:
+      chunks: messagespring-dev-loki-chunks-123456789012-ap-southeast-7
+      ruler: messagespring-dev-loki-ruler-123456789012-ap-southeast-7
+  # Same as loki_retention_days = 7 in infra/envs/dev/terraform.tfvars.
+  limits_config:
+    retention_period: 168h

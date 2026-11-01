@@ -1,0 +1,33 @@
+# Loki (Monolithic) storing logs in S3. After storage (its write-ahead log is a
+# gp3 volume) and before Alloy, which pushes to it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  project: platform
+  sources:
+    - repoURL: https://grafana-community.github.io/helm-charts
+      chart: loki
+      targetRevision: 20.0.3
+      helm:
+        releaseName: loki
+        valueFiles:
+          - $values/k8s/platform/loki/values.yaml
+          - $values/k8s/platform/loki/values-prod.yaml
+    - repoURL: https://github.com/aung-myatkyaw/messagespring-devops-challenge.git
+      targetRevision: main
+      ref: values
+  # Same namespace as the Pod Identity association (logging/loki).
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

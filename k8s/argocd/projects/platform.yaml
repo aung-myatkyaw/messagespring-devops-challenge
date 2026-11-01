@@ -19,6 +19,8 @@ spec:
     - https://kubernetes-sigs.github.io/external-dns
     - https://charts.external-secrets.io
     - https://kubernetes-sigs.github.io/metrics-server
+    - https://grafana-community.github.io/helm-charts
+    - https://grafana.github.io/helm-charts
     # Helm chart in an OCI registry (Argo CD omits the oci:// prefix)
     - public.ecr.aws/karpenter
   # Any namespace of this cluster only. A namespace list would add little here:
