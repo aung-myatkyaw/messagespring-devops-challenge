@@ -10,6 +10,11 @@ output "ecr_push_role_arn" {
   value       = module.github_oidc.ecr_push_role_arn
 }
 
+output "ecr_scan_role_arn" {
+  description = "Pull-only role for the daily image rescan (GitHub variable ECR_SCAN_ROLE_ARN)."
+  value       = module.github_oidc.ecr_scan_role_arn
+}
+
 output "infra_plan_role_arn" {
   description = "Read-only role for terraform plan on pull requests."
   value       = module.github_oidc.infra_plan_role_arn

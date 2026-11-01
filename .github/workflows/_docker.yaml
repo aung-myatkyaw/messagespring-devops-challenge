@@ -1,0 +1,223 @@
+# Reusable: build a container image once, scan it, and push that same image
+# to ECR. Called by app.yaml; any other service's workflow can call it with
+# its own context.
+#
+# The image is scanned before it is pushed: a build with fixable HIGH or
+# CRITICAL vulnerabilities never reaches the registry, so it can never be
+# deployed. ECR scans it again on push.
+#
+# The caller grants: contents: read, id-token: write (AWS OIDC),
+# security-events: write (scan results in code scanning, public repos only).
+name: build image
+
+on:
+  workflow_call:
+    inputs:
+      context:
+        description: Docker build context (directory containing the Dockerfile)
+        type: string
+        required: true
+      image-name:
+        description: Local image name, also the build cache scope
+        type: string
+        required: true
+      push:
+        description: Push to ECR after a clean scan
+        type: boolean
+        default: false
+      aws-region:
+        type: string
+        required: true
+      aws-role-arn:
+        description: Role assumed through OIDC to push; empty skips the push
+        type: string
+        default: ""
+      ecr-repository:
+        description: ECR repository URL; empty skips the push
+        type: string
+        default: ""
+    outputs:
+      tag:
+        description: Image tag (short commit SHA)
+        value: ${{ jobs.build.outputs.tag }}
+      repository:
+        description: ECR repository URL the image was pushed to
+        value: ${{ inputs.ecr-repository }}
+      pushed:
+        description: "'true' when the image is in ECR"
+        value: ${{ jobs.build.outputs.pushed }}
+
+permissions: {}
+
+env:
+  TRIVY_VERSION: v0.76.1
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      pushed: ${{ steps.push.outputs.pushed || 'false' }}
+    env:
+      # Push only when asked and when AWS is configured, so forks and a repo
+      # without AWS still build and scan.
+      PUSH: ${{ inputs.push && inputs.aws-role-arn != '' && inputs.ecr-repository != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Image tag
+        id: meta
+        env:
+          IMAGE_NAME: ${{ inputs.image-name }}
+        run: |
+          tag="${GITHUB_SHA::7}"
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          echo "local=$IMAGE_NAME:$tag" >>"$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Loaded into the runner's Docker for the scan; the push below reuses
+      # this build. Layers are cached in the GitHub Actions cache.
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ inputs.context }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ steps.meta.outputs.local }}
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=${{ inputs.image-name }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.image-name }}
+
+      # Code scanning needs GitHub Advanced Security on private repositories,
+      # so the SARIF report is uploaded only when the repository is public.
+      - name: Scan (SARIF report)
+        if: ${{ !github.event.repository.private }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ steps.meta.outputs.local }}
+          format: sarif
+          output: trivy-image.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload scan results
+        if: ${{ !github.event.repository.private }}
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy-image.sarif
+          category: image-${{ inputs.image-name }}
+
+      # The gate: fail on HIGH/CRITICAL vulnerabilities that have a fix
+      # available. Unfixed ones can't be acted on yet; ECR's scan still
+      # reports them.
+      - name: Scan (gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ steps.meta.outputs.local }}
+          format: table
+          output: trivy-image.txt
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # The findings go on the run's summary page too, so a failed gate shows
+      # what to fix without digging through the log (and without code
+      # scanning while the repository is private).
+      - name: Scan results to the summary
+        if: ${{ !cancelled() && hashFiles('trivy-image.txt') != '' }}
+        run: |
+          cat trivy-image.txt
+          {
+            echo "### Image scan (fixable HIGH/CRITICAL)"
+            if grep -qE 'Total: [1-9]' trivy-image.txt; then
+              echo "<details open><summary>Findings</summary>"
+              echo
+              echo '```text'
+              cat trivy-image.txt
+              echo '```'
+              echo "</details>"
+            else
+              echo "No findings."
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Configure AWS credentials (OIDC)
+        if: env.PUSH == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ inputs.aws-role-arn }}
+          role-session-name: gha-${{ github.run_id }}-${{ github.run_attempt }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Log in to ECR
+        if: env.PUSH == 'true'
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      # ECR tags are immutable, so pushing a tag that exists fails. A re-run
+      # for the same commit finds its image already there and reuses it.
+      - name: Check the registry
+        id: registry
+        if: env.PUSH == 'true'
+        env:
+          REPOSITORY: ${{ inputs.ecr-repository }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          if aws ecr describe-images --repository-name "${REPOSITORY#*/}" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
+            echo "::notice::$REPOSITORY:$TAG already exists; not pushing again"
+            echo "exists=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      # Same inputs as the build above, in the same builder, so every step is
+      # a cache hit: nothing is rebuilt, and the layers pushed are the ones
+      # Trivy scanned. Only the export changes, from the local Docker to ECR.
+      # Attestations are off so ECR holds one plain manifest per tag (what the
+      # lifecycle policy counts and ECR scans); signing is a next step.
+      - name: Push
+        id: push-image
+        if: env.PUSH == 'true' && steps.registry.outputs.exists == 'false'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ inputs.context }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ inputs.ecr-repository }}:${{ steps.meta.outputs.tag }}
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=${{ inputs.image-name }}
+          provenance: false
+          sbom: false
+
+      - name: Record the image
+        id: push
+        if: env.PUSH == 'true'
+        env:
+          REPOSITORY: ${{ inputs.ecr-repository }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          DIGEST: ${{ steps.push-image.outputs.digest }}
+        run: |
+          if [[ -z $DIGEST ]]; then
+            DIGEST=$(aws ecr describe-images --repository-name "${REPOSITORY#*/}" --image-ids imageTag="$TAG" \
+              --query 'imageDetails[0].imageDigest' --output text)
+          fi
+          echo "pushed=true" >>"$GITHUB_OUTPUT"
+          {
+            echo "### Image"
+            echo "\`$REPOSITORY:$TAG\`"
+            echo
+            echo "Digest: \`$DIGEST\`"
+          } >>"$GITHUB_STEP_SUMMARY"
