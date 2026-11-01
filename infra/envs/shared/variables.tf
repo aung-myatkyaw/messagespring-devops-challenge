@@ -14,6 +14,16 @@ variable "github_repository" {
   type        = string
 }
 
+variable "github_owner_id" {
+  description = "Numeric ID of the repository owner: gh api repos/<owner>/<repo> --jq .owner.id"
+  type        = number
+}
+
+variable "github_repository_id" {
+  description = "Numeric ID of the repository: gh api repos/<owner>/<repo> --jq .id"
+  type        = number
+}
+
 variable "tags" {
   description = "Extra tags added to every resource (e.g. Owner, CostCenter)."
   type        = map(string)
