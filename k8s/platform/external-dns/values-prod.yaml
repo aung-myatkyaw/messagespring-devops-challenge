@@ -1,6 +1,6 @@
-# Placeholder zone; set to the real Cloudflare zone (same as
-# cloudflare_zone_name in infra/envs/prod/terraform.tfvars).
-domainFilters:
-  - example.com
+# The Cloudflare zone (same as cloudflare_zone_name in
+# infra/envs/prod/terraform.tfvars). example.com is a placeholder until
+# scripts/set-env-values.sh writes the real one.
+domainFilters: [example.com]
 # Marks the records this cluster owns, so dev and prod can share one zone.
 txtOwnerId: messagespring-prod

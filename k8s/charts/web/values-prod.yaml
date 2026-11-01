@@ -2,7 +2,10 @@
 # values-dev.yaml.
 
 # Changed only by the promote-to-prod pull request, which copies the reference
-# dev is running. 123456789012 is a placeholder account ID.
+# dev is running.
+#
+# Account ID 123456789012 and example.com are placeholders until
+# scripts/set-env-values.sh writes the real ones.
 image:
   repository: 123456789012.dkr.ecr.ap-southeast-7.amazonaws.com/messagespring/web
   tag: "0000000"
@@ -13,7 +16,7 @@ hpa:
 
 ingress:
   host: messagespring.example.com
-  # infra/envs/prod output alb_logs_bucket_name (placeholder account ID).
+  # infra/envs/prod output alb_logs_bucket_name.
   accessLogsBucket: messagespring-prod-alb-logs-123456789012-ap-southeast-7
 
 networkPolicy:

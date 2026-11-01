@@ -2,8 +2,10 @@
 
 # Written by CI after every build on main; the same image is promoted to prod
 # through a pull request that edits values-prod.yaml (ECR tags are immutable,
-# so a tag always means the same image). 123456789012 is a placeholder account
-# ID until the first build.
+# so a tag always means the same image).
+#
+# Account ID 123456789012 and example.com are placeholders until
+# scripts/set-env-values.sh writes the real ones.
 image:
   repository: 123456789012.dkr.ecr.ap-southeast-7.amazonaws.com/messagespring/web
   tag: "0000000"
@@ -26,7 +28,7 @@ tolerations:
 
 ingress:
   host: messagespring-dev.example.com
-  # infra/envs/dev output alb_logs_bucket_name (placeholder account ID).
+  # infra/envs/dev output alb_logs_bucket_name.
   accessLogsBucket: messagespring-dev-alb-logs-123456789012-ap-southeast-7
 
 networkPolicy:
