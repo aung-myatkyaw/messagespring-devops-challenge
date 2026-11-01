@@ -178,10 +178,13 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      # create-pull-request authenticates with its own token input.
+      # This job's GITHUB_TOKEN has no permissions, so it can't read a private
+      # repository: check out with the App token. Not persisted, because
+      # create-pull-request pushes with its own token input.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          token: ${{ steps.app-token.outputs.token }}
           persist-credentials: false
 
       - name: Point prod at the image dev runs
