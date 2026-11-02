@@ -154,7 +154,10 @@ jobs:
       ROOT: infra/envs/${{ matrix.environment }}
       # Read-only Cloudflare token (zone and DNS read) for the dev/prod zone
       # lookups. Cloudflare has no OIDC federation, so this is a stored secret.
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READ }}
+      # shared has no Cloudflare provider, so its job doesn't get the token.
+      CLOUDFLARE_API_TOKEN: ${{ matrix.environment != 'shared' && secrets.CLOUDFLARE_API_TOKEN_READ || '' }}
+      # The pull request's head commit; GITHUB_SHA is a temporary merge commit.
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -212,19 +215,26 @@ jobs:
           {
             echo "### Terraform plan: \`$ENVIRONMENT\`"
             echo
-            echo "$status ([run]($run_url), commit ${GITHUB_SHA::7})"
-            echo
-            echo "<details><summary>Output</summary>"
-            echo
-            echo '```text'
-            # Comments are limited to 65536 characters; the full log is in the run.
-            if [[ $failed == true ]]; then
-              tail -c 20000 plan.log
-            else
-              sed -n '/^Terraform used the selected providers/,$p' plan.log | head -c 60000
+            echo "$status ([run]($run_url), commit ${HEAD_SHA::7})"
+            # Nothing more to show when there are no changes.
+            if [[ $code != 0 ]]; then
+              echo
+              echo "<details><summary>Output</summary>"
+              echo
+              echo '```text'
+              # Comments are limited to 65536 characters; the full log is in the run.
+              if [[ $failed == true ]]; then
+                tail -c 20000 plan.log
+              else
+                # Drop the per-resource refresh lines; keep the plan itself.
+                # Via a file: under pipefail, head closing the pipe early
+                # would fail the step.
+                grep -vE ': (Refreshing state|Reading|Read complete after)' plan.log >plan-short.log || true
+                head -c 60000 plan-short.log
+              fi
+              echo '```'
+              echo "</details>"
             fi
-            echo '```'
-            echo "</details>"
           } >"$RUNNER_TEMP/plan-comment.md"
           cat "$RUNNER_TEMP/plan-comment.md" >>"$GITHUB_STEP_SUMMARY"
           echo "failed=$failed" >>"$GITHUB_OUTPUT"
