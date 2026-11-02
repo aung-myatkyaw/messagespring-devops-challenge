@@ -227,7 +227,13 @@ or a child Application by hand gets undone. Work from the top down:
    kubectl -n argocd delete application karpenter-nodes
    kubectl delete nodepool apps
    kubectl get nodeclaims         # wait until empty
+   kubectl delete ec2nodeclass apps
    ```
+
+   Delete the EC2NodeClass too, while Karpenter still runs: Karpenter created
+   an instance profile for the node role and launch templates for it. Left
+   behind, the instance profile keeps the node role in use and
+   `terraform destroy` fails to delete it (`DeleteConflict`).
 
 4. **Remove Loki's volume** (an EBS volume created by the CSI driver):
 
