@@ -36,6 +36,10 @@ coverage/
 next-env.d.ts
 npm-debug.log*
 
+# --- Python (architecture/render.sh) ---
+.venv/
+__pycache__/
+
 # --- OS / editor ---
 .DS_Store
 .idea/
