@@ -9,7 +9,7 @@
 # placeholders until scripts/set-env-values.sh writes the real ones.
 image:
   repository: 582415712618.dkr.ecr.ap-southeast-7.amazonaws.com/messagespring/web
-  tag: "5400061"
+  tag: "b824719"
 
 hpa:
   minReplicas: 1
