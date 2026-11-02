@@ -5,7 +5,7 @@ backend-for-frontend (BFF).
 
 | Path | What it is |
 | --- | --- |
-| `/` | Frontend: a large "Hello World" page |
+| `/` | Frontend: a large "Hello World" page, with the running version (`APP_VERSION`) under it |
 | `/api/health` | BFF health check: `{"status":"ok","version":"<git sha>","uptimeSeconds":n}` |
 
 ## Scripts
