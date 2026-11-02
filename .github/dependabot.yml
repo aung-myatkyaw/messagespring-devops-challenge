@@ -1,0 +1,88 @@
+# Weekly dependency updates, grouped so they arrive as a few pull requests,
+# each going through the same checks as any other change.
+#
+# A 7-day cooldown keeps brand-new releases out until they've had time to be
+# pulled or fixed: compromised packages are usually caught within days.
+# Commit prefixes keep Dependabot's commits Conventional (checked in CI).
+#
+# Not covered by Dependabot, bumped by hand:
+#   - chart versions in the Argo CD Applications (k8s/argocd/envs/*)
+#   - tool versions in scripts/install-ci-tools.sh and inside workflows
+#     (Terraform, TFLint, Trivy)
+# Renovate's argocd manager could take over the chart versions.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /application
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: fix
+      prefix-development: chore
+      include: scope
+    groups:
+      # Minor and patch updates together; majors one by one, since they're
+      # the ones that break.
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # eslint-config-next 16 bundles plugins that only support ESLint 9.
+      # Drop this once it supports ESLint 10.
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker
+    directory: /application
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: terraform
+    directories:
+      - /infra/bootstrap
+      - /infra/envs/*
+      - /infra/envs/*/bootstrap
+      - /infra/modules/*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      terraform:
+        patterns: ["*"]
+
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      pre-commit:
+        patterns: ["*"]

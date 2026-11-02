@@ -1,0 +1,76 @@
+# The same pre-commit hooks developers run locally, so skipping them locally
+# (or never installing them) can't get a change into main. Runs on every pull
+# request and is a required check.
+#
+# Hooks that need more context or tools run in their own workflows instead,
+# listed in SKIP below. This job also checks that every commit in a pull request
+# follows Conventional Commits, because commits are kept as they are
+# (rebase merge).
+name: pre-commit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the commit message check walks the pull request's commits
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install pre-commit and hadolint
+        run: |
+          python -m pip install --no-cache-dir pre-commit==4.6.2
+          scripts/install-ci-tools.sh hadolint
+
+      # Hook environments, keyed on the config that defines them.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # Skipped here, run elsewhere:
+      #   terraform_*    infra.yaml (fmt, validate every root, tflint, Trivy)
+      #   validate-k8s   k8s.yaml
+      #   gitleaks       secret-scan.yaml scans the whole history; the hook
+      #                  only scans staged changes, which CI doesn't have
+      - name: Run the hooks
+        env:
+          SKIP: terraform_fmt,terraform_validate,terraform_tflint,validate-k8s,gitleaks
+        run: pre-commit run --all-files --show-diff-on-failure --color always
+
+      - name: Conventional Commits
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          message="$RUNNER_TEMP/commit-message"
+          for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            git log -1 --format=%B "$sha" >"$message"
+            if ! pre-commit run conventional-pre-commit --hook-stage commit-msg --commit-msg-filename "$message" >/dev/null; then
+              echo "::error::${sha::7} doesn't follow Conventional Commits: $(head -1 "$message")"
+              status=1
+            fi
+          done
+          exit "$status"

@@ -1,0 +1,108 @@
+# Validates everything Argo CD deploys from k8s/, before it reaches main.
+# This includes the release commits and promote pull requests that change
+# an image tag.
+#
+#   scripts/validate-k8s.sh   raw manifests, local charts per values-<env>.yaml and
+#                             the platform Applications' upstream charts with our values,
+#                             rendered and schema-checked (same script as pre-commit)
+#   Trivy                     misconfigurations in the local charts, rendered per env
+name: k8s
+
+on:
+  # Every pull request, so "k8s ok" can be a required check; the jobs skip
+  # when nothing under k8s/ changed.
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - k8s/**
+      - scripts/validate-k8s.sh
+      - scripts/install-ci-tools.sh
+      - .trivyignore.yaml
+      - .github/workflows/k8s.yaml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    name: detect changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      k8s: ${{ github.event_name != 'pull_request' || steps.filter.outputs.k8s == 'true' }}
+    steps:
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            k8s:
+              - k8s/**
+              - scripts/validate-k8s.sh
+              - scripts/install-ci-tools.sh
+              - .trivyignore.yaml
+              - .github/workflows/k8s.yaml
+
+  validate:
+    name: render, validate, scan
+    needs: changes
+    if: needs.changes.outputs.k8s == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install helm, kubeconform, yq
+        run: scripts/install-ci-tools.sh helm kubeconform yq
+
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.76.1
+
+      - name: Render and validate
+        run: scripts/validate-k8s.sh
+
+      # Each chart with each environment's values: the charts use `required`,
+      # so without values Trivy can't render them and silently scans nothing.
+      - name: Trivy (misconfigurations)
+        run: |
+          status=0
+          for chart in k8s/charts/*/; do
+            chart=${chart%/}
+            for values in "$chart"/values-*.yaml; do
+              echo "::group::$chart ($(basename "$values"))"
+              trivy config --severity HIGH,CRITICAL --exit-code 1 \
+                --ignorefile .trivyignore.yaml --helm-values "$values" "$chart" || status=1
+              echo "::endgroup::"
+            done
+          done
+          exit "$status"
+
+  ok:
+    name: k8s ok
+    # The required check: always reports, even when validate was skipped.
+    if: always()
+    needs: [changes, validate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check the results
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "job results: $RESULTS"
+          if grep -qE '"(failure|cancelled)"' <<<"$RESULTS"; then
+            exit 1
+          fi

@@ -12,8 +12,8 @@
 # RELEASE_APP_PRIVATE_KEY), so the pipeline stays green without them. Setup:
 # docs/runbooks/github-setup.md.
 #
-# No loop: the release commits only touch k8s/, which doesn't match the paths
-# below, so they never trigger this workflow again.
+# No loop: the release commits only touch k8s/, which doesn't match the push
+# paths below, so they never trigger a release again.
 name: app
 
 on:
@@ -23,11 +23,9 @@ on:
       - application/**
       - .github/workflows/app.yaml
       - .github/workflows/_docker.yaml
+  # Every pull request, so "app ok" can be a required check; the jobs skip
+  # when the application didn't change.
   pull_request:
-    paths:
-      - application/**
-      - .github/workflows/app.yaml
-      - .github/workflows/_docker.yaml
   workflow_dispatch:
 
 # Every job asks for what it needs; nothing by default.
@@ -41,8 +39,30 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: detect changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      # Pushes are already filtered by the trigger's paths.
+      app: ${{ github.event_name != 'pull_request' || steps.filter.outputs.app == 'true' }}
+    steps:
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            app:
+              - application/**
+              - .github/workflows/app.yaml
+              - .github/workflows/_docker.yaml
+
   quality:
     name: lint and typecheck
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -219,3 +239,23 @@ jobs:
           # Committed through the API as the App, so the commit is signed.
           sign-commits: true
           delete-branch: true
+
+  ok:
+    name: app ok
+    # The required check: always reports, even when the build was skipped
+    # because the application didn't change. Release jobs aren't included;
+    # they only run on main, after the merge.
+    if: always()
+    needs: [changes, quality, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check the results
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "job results: $RESULTS"
+          if grep -qE '"(failure|cancelled)"' <<<"$RESULTS"; then
+            exit 1
+          fi
