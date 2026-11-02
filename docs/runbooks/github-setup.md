@@ -117,8 +117,9 @@ Environment. Each apply role trusts only jobs running in its Environment.
 3. Turn applies on: `gh variable set INFRA_APPLY_ENABLED --body true`.
 
 Environments on private repositories need a paid plan; on GitHub Free they work once the
-repository is public. Until then, apply by hand from a laptop (see the cluster bootstrap
-runbook). `infra/bootstrap` and `infra/envs/<env>/bootstrap` are always applied by hand.
+repository is public. Until then, apply by hand from a laptop (see
+[cluster-bootstrap.md](cluster-bootstrap.md)). `infra/bootstrap` and
+`infra/envs/<env>/bootstrap` are always applied by hand.
 
 ## 4. Default workflow token
 
