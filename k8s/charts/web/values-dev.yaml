@@ -28,9 +28,9 @@ tolerations:
     effect: NoSchedule
 
 ingress:
-  host: messagespring-dev.example.com
+  host: messagespring-dev.aungmyatkyaw.cv
   # infra/envs/dev output alb_logs_bucket_name.
-  accessLogsBucket: messagespring-dev-alb-logs-123456789012-ap-southeast-7
+  accessLogsBucket: messagespring-dev-alb-logs-582415712618-ap-southeast-7
 
 networkPolicy:
   # Public subnets of the dev VPC (infra/envs/dev output public_subnet_cidrs).
