@@ -52,6 +52,10 @@ the certificate.
 
 3. Review the diff and merge it through a pull request. Argo CD deploys from
    `main`, so these must be there before step 5.
+4. **prod only:** `values-prod.yaml` starts with the placeholder tag
+   `0000000`, because prod only ever runs an image dev has run. Merge the open
+   promote pull request first (it sets the image dev runs now); otherwise
+   `web` can't pull its image and stays Degraded.
 
 **Shell, for every Terraform session.** Credentials come from the
 environment, never from files in the repository:
@@ -187,6 +191,7 @@ curl -fsS https://<hostname>/api/health
 | Ingress has no address | load balancer controller logs; the public subnets need the `kubernetes.io/role/elb` tag (set by Terraform) |
 | Certificate not found | `app_hostname` in tfvars differs from `ingress.host` in `values-dev.yaml` |
 | Applications show `ComparisonError` | the repository Secret (private repository) |
+| `web` pods in `ImagePullBackOff` (prod) | `values-prod.yaml` still has the placeholder tag: merge the promote pull request (step 0) |
 
 ## 7. Taking an environment down
 
@@ -194,15 +199,51 @@ Order matters: the controllers created AWS and Cloudflare resources that
 Terraform doesn't know about. Delete them through Kubernetes first, or they
 are orphaned and keep costing money.
 
-1. Delete the `web` Application, then the `karpenter-nodes` Application, while
-   Karpenter still runs, so it terminates its nodes. Wait until
-   `kubectl get nodeclaims` is empty.
-2. Check that the ALB and target groups are gone (load balancer controller)
-   and the DNS record is removed (external-dns). Delete the PVCs so their EBS
-   volumes go.
-3. `terraform destroy` in `infra/envs/dev/bootstrap`, then `infra/envs/dev`.
+Every Application syncs automatically with self-heal, so deleting a resource
+or a child Application by hand gets undone. Work from the top down:
+
+1. **Stop the root from re-creating its children.** It has no finalizer, so
+   deleting it leaves the children and their workloads running:
+
+   ```bash
+   kubectl -n argocd delete application root
+   ```
+
+2. **Remove the app and its load balancer.** `web` has a finalizer, so deleting
+   it deletes the Deployment and the Ingress. The load balancer controller then
+   deletes the ALB and target groups, and external-dns deletes the DNS record:
+
+   ```bash
+   kubectl -n argocd delete application web
+   kubectl -n web get ingress     # wait until it's gone
+   ```
+
+3. **Remove Karpenter's nodes** while Karpenter still runs. The
+   `karpenter-nodes` Application has no finalizer, so delete it first (it
+   would re-create the NodePool), then the NodePool; Karpenter drains and
+   terminates its nodes:
+
+   ```bash
+   kubectl -n argocd delete application karpenter-nodes
+   kubectl delete nodepool apps
+   kubectl get nodeclaims         # wait until empty
+   ```
+
+4. **Remove Loki's volume** (an EBS volume created by the CSI driver):
+
+   ```bash
+   kubectl -n argocd delete application loki
+   kubectl -n logging delete statefulset loki
+   kubectl -n logging delete pvc storage-loki-0
+   ```
+
+5. **Check AWS** for leftovers: no load balancer or target group tagged
+   `elbv2.k8s.aws/cluster=messagespring-dev`, no instance tagged
+   `karpenter.sh/nodepool`, no `available` EBS volume from the cluster, and no
+   app record in Cloudflare.
+6. `terraform destroy` in `infra/envs/dev/bootstrap`, then `infra/envs/dev`.
    prod has deletion protection; turn it off in tfvars first, deliberately.
-4. Only when removing everything: empty the ECR repository, destroy
+7. Only when removing everything: empty the ECR repository, destroy
    `infra/envs/shared`, then `infra/bootstrap` (its bucket has
    `prevent_destroy` and is versioned: remove the guard locally, empty all
    versions, then destroy).

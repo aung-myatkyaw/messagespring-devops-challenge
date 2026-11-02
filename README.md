@@ -183,10 +183,19 @@ files, never branches.
 - **ESLint stays on 9.** `eslint-config-next` 16.4 bundles plugins whose peer
   ranges stop at ESLint 9. ESLint 10 lints this app cleanly but conflicts with
   those ranges. Dev-only, not in the image. Dependabot ignores ESLint majors
-  until the config supports 10.
+  until the config supports 10. `npm audit` reports moderate findings in this
+  lint toolchain (a `minimatch` advisory reached through the ESLint 9 plugins);
+  the production dependencies have none, and the only fix npm offers is a
+  downgrade.
 - **TypeScript stays below 6.1.** `typescript-eslint` (bundled by
   `eslint-config-next`) supports TypeScript below 6.1; TypeScript 7 stops
   ESLint from loading. 6.0.x works and Dependabot is limited to it.
+- **The plan role may need `kms:Decrypt` for dev and prod.** Refreshing the
+  SecureString parameters during a plan can require decrypting them with the
+  environment's secrets key, which `ReadOnlyAccess` doesn't include. It isn't
+  granted until a real dev plan shows it's needed, because it would let
+  pull-request runs read secret values; the alternative is to keep secret
+  parameters out of the planned roots.
 - **dev release commits are unsigned.** The release App pushes the dev commit
   with git; the promote commits for prod are made through the API and are
   signed. Signing the dev commit would mean committing through the API too.

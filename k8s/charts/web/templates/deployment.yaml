@@ -28,7 +28,7 @@ spec:
     spec:
       # No readinessGates here: the AWS Load Balancer Controller injects one
       # into pods of namespaces labelled elbv2.k8s.aws/pod-readiness-gate-inject
-      # (set by the Argo CD Application). A new pod then counts as Ready only
+      # (set in k8s/platform/namespaces/web.yaml). A new pod then counts as Ready only
       # once its ALB target is healthy, so with maxUnavailable 0 the rollout
       # never removes old pods before the ALB can reach the new ones.
       serviceAccountName: {{ .Release.Name }}
