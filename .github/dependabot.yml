@@ -46,6 +46,15 @@ updates:
       # Drop this once it supports ESLint 10.
       - dependency-name: eslint
         update-types: [version-update:semver-major]
+      # typescript-eslint (bundled by eslint-config-next) supports TypeScript
+      # below 6.1; TypeScript 7 (the native compiler) stops ESLint from
+      # loading. Drop this once typescript-eslint supports it.
+      - dependency-name: typescript
+        versions: [">=6.1.0"]
+      # The types follow the Node.js major the image runs (Dockerfile); move
+      # both together by hand.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: docker
     directory: /application
