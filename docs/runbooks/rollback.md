@@ -23,10 +23,22 @@ Every release is one commit that changes the image in a values file:
 git switch main && git pull --ff-only
 git log --oneline -- k8s/charts/web/values-prod.yaml     # find the bad release commit
 git switch -c revert/prod-<sha>
-git revert <release-commit>
+git revert --no-commit <release-commit>
+git commit -m "revert: promote web <sha> to prod"
 git push -u origin HEAD
 gh pr create --fill --label release
 ```
+
+Commit the revert yourself with a `revert:` message. Git's default message
+(`Revert "…"`) isn't a Conventional Commit, and `git revert` doesn't run the
+local commit-msg hook, so only the `pre-commit` check on the pull request
+would catch it.
+
+Branch from an up-to-date `main`. If `git pull --ff-only` refuses because
+your local `main` has commits of its own (for example a copy of an earlier
+revert that was since rebase-merged under a new SHA), reset it to the remote
+with `git switch -C main origin/main` after `git fetch`; otherwise the branch
+carries those copies and the pull request won't merge cleanly.
 
 Merge it once the checks pass. Argo CD deploys the previous image, which is
 still in ECR (the newest 50 images are kept). Watch it:
@@ -45,6 +57,11 @@ only after the ALB reports it healthy, so a rollback causes no downtime.
 deploys it to dev again, and the promote pull request offers it for prod.
 Revert or fix the code change too, and close or update the promote pull
 request until the fix is in.
+
+**Roll forward** once the problem is fixed: revert the rollback commit the
+same way (`git revert --no-commit <rollback-commit>`, then
+`git commit -m "revert: roll <env> forward to web <sha>"`), or let the next
+release replace it.
 
 **Go back further than one release:** set `image.tag` in the values file to
 any earlier tag that's still in ECR (`git log` of the values file lists them),
