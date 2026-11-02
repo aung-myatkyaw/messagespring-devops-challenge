@@ -1,0 +1,345 @@
+# Terraform pipeline for infra/.
+#
+#   pull request   fmt, validate, tflint, Trivy (every root, no AWS)
+#                  -> plan per environment, posted on the pull request   (read-only role)
+#   push to main   the same checks -> apply shared, then dev, then prod  (GitHub Environments;
+#                                                                        prod waits for a reviewer)
+#
+# Not here: infra/bootstrap (the state bucket, run once by hand) and
+# infra/envs/<env>/bootstrap (the Argo CD install, which needs cluster
+# credentials). Both are still validated statically.
+#
+# Plans and applies are skipped, never failed, until the repository is set up
+# (docs/runbooks/github-setup.md): plan needs INFRA_PLAN_ROLE_ARN and
+# TF_STATE_BUCKET; apply also needs INFRA_APPLY_ENABLED=true and the
+# Environments. dev and prod are skipped while their terraform.tfvars still
+# hold the placeholder domain and admin CIDR.
+name: infra
+
+on:
+  # Every pull request, so "infra ok" can be a required check; the jobs skip
+  # when nothing under infra/ changed.
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - infra/**
+      - .trivyignore.yaml
+      - .github/workflows/infra.yaml
+      - .github/actions/terraform-init/**
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  changes:
+    name: detect changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read # list the pull request's files
+    outputs:
+      # Pushes are already filtered by the trigger's paths.
+      infra: ${{ github.event_name != 'pull_request' || steps.filter.outputs.infra == 'true' }}
+    steps:
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            infra:
+              - infra/**
+              - .trivyignore.yaml
+              - .github/workflows/infra.yaml
+              - .github/actions/terraform-init/**
+
+  static:
+    name: fmt, validate, lint, scan
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.65.0
+
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.76.1
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff infra
+
+      # Every root module, without a backend (no AWS access in this job).
+      # Validating a root also validates the local modules it calls, and
+      # every module under infra/modules is called by at least one root.
+      - name: terraform validate (every root)
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          status=0
+          while IFS= read -r root; do
+            echo "::group::$root"
+            if ! terraform -chdir="$root" init -backend=false -lockfile=readonly >/dev/null ||
+               ! terraform -chdir="$root" validate; then
+              echo "::error::terraform validate failed in $root"
+              status=1
+            fi
+            echo "::endgroup::"
+          done < <(find infra -name versions.tf -not -path '*/.terraform/*' -not -path 'infra/modules/*' \
+                     -exec dirname {} \; | sort)
+          exit "$status"
+
+      # The token only raises the GitHub API rate limit for the plugin download.
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        working-directory: infra
+        run: |
+          tflint --init --config "$PWD/.tflint.hcl"
+          tflint --recursive --config "$PWD/.tflint.hcl" --format compact
+
+      # After init, so the community modules are on disk and scanned too.
+      # Accepted findings, each with a reason: .trivyignore.yaml.
+      - name: Trivy (misconfigurations)
+        run: |
+          trivy config --severity HIGH,CRITICAL --exit-code 1 \
+            --ignorefile .trivyignore.yaml \
+            --skip-dirs '**/.terraform/modules/*/examples' \
+            infra
+
+  plan:
+    name: plan (${{ matrix.environment }})
+    needs: [changes, static]
+    # Not for forks or Dependabot: their runs get no OIDC token or secrets.
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.changes.outputs.infra == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]' &&
+      vars.INFRA_PLAN_ROLE_ARN != '' && vars.TF_STATE_BUCKET != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # AWS OIDC: the read-only plan role trusts pull_request runs only
+      pull-requests: write # the plan comment
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [shared, dev, prod]
+    env:
+      ENVIRONMENT: ${{ matrix.environment }}
+      ROOT: infra/envs/${{ matrix.environment }}
+      # Read-only Cloudflare token (zone and DNS read) for the dev/prod zone
+      # lookups. Cloudflare has no OIDC federation, so this is a stored secret.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READ }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Ready to plan?
+        id: ready
+        run: |
+          if [[ $ENVIRONMENT != shared ]]; then
+            if grep -qE 'example\.com|203\.0\.113\.' "$ROOT/terraform.tfvars"; then
+              echo "::notice::$ROOT/terraform.tfvars still has placeholder values; not planning $ENVIRONMENT"
+              echo "ready=false" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [[ -z $CLOUDFLARE_API_TOKEN ]]; then
+              echo "::notice::secret CLOUDFLARE_API_TOKEN_READ isn't set; not planning $ENVIRONMENT"
+              echo "ready=false" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "ready=true" >>"$GITHUB_OUTPUT"
+
+      - name: terraform init
+        if: steps.ready.outputs.ready == 'true'
+        # Read from the commit checked out above; no step in between writes to
+        # the workspace. GitHub's newer `$/` form isn't accepted by actionlint yet.
+        uses: ./.github/actions/terraform-init # zizmor: ignore[self-repository]
+        with:
+          root: ${{ env.ROOT }}
+          role-arn: ${{ vars.INFRA_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-southeast-7' }}
+          state-bucket: ${{ vars.TF_STATE_BUCKET }}
+
+      # Exit code 0 = no changes, 2 = changes, anything else = error. The
+      # plan (or the error) goes on the pull request either way, then an
+      # error fails the job. Sensitive values are redacted by Terraform.
+      - name: terraform plan
+        id: plan
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          set +e
+          terraform -chdir="$ROOT" plan -no-color -lock-timeout=5m -detailed-exitcode -out=tfplan >plan.log 2>&1
+          code=$?
+          set -e
+          cat plan.log
+
+          failed=false
+          case $code in
+            0) status="No changes." ;;
+            2) status=$(grep -E '^Plan: ' plan.log || echo "Changes planned.") ;;
+            *) status="**Plan failed.**"; failed=true ;;
+          esac
+
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "### Terraform plan: \`$ENVIRONMENT\`"
+            echo
+            echo "$status ([run]($run_url), commit ${GITHUB_SHA::7})"
+            echo
+            echo "<details><summary>Output</summary>"
+            echo
+            echo '```text'
+            # Comments are limited to 65536 characters; the full log is in the run.
+            if [[ $failed == true ]]; then
+              tail -c 20000 plan.log
+            else
+              sed -n '/^Terraform used the selected providers/,$p' plan.log | head -c 60000
+            fi
+            echo '```'
+            echo "</details>"
+          } >"$RUNNER_TEMP/plan-comment.md"
+          cat "$RUNNER_TEMP/plan-comment.md" >>"$GITHUB_STEP_SUMMARY"
+          echo "failed=$failed" >>"$GITHUB_OUTPUT"
+
+      # One comment per environment, updated by every new run.
+      - name: Comment on the pull request
+        if: steps.ready.outputs.ready == 'true' && steps.plan.outcome == 'success'
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: terraform-plan-${{ matrix.environment }}
+          path: ${{ runner.temp }}/plan-comment.md
+
+      - name: Fail on a plan error
+        if: steps.plan.outputs.failed == 'true'
+        run: exit 1
+
+  apply:
+    name: apply (${{ matrix.environment }})
+    needs: [changes, static]
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.infra == 'true' &&
+      vars.INFRA_APPLY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write # AWS OIDC: each apply role trusts only its own Environment
+    # One environment at a time, in this order; a failure cancels the rest.
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        environment: [shared, dev, prod]
+    # The Environment is the approval gate: deployments only from main, and
+    # prod (optionally shared) requires a reviewer. Its variables and secrets
+    # hold the apply role and the Cloudflare edit token.
+    environment: ${{ matrix.environment }}
+    concurrency:
+      group: terraform-apply-${{ matrix.environment }}
+      cancel-in-progress: false
+    env:
+      ENVIRONMENT: ${{ matrix.environment }}
+      ROOT: infra/envs/${{ matrix.environment }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Ready to apply?
+        id: ready
+        env:
+          ROLE_ARN: ${{ vars.INFRA_APPLY_ROLE_ARN }}
+        run: |
+          if [[ -z $ROLE_ARN ]]; then
+            echo "::notice::Environment $ENVIRONMENT has no INFRA_APPLY_ROLE_ARN variable; not applying"
+          elif [[ $ENVIRONMENT != shared ]] && grep -qE 'example\.com|203\.0\.113\.' "$ROOT/terraform.tfvars"; then
+            echo "::notice::$ROOT/terraform.tfvars still has placeholder values; not applying $ENVIRONMENT"
+          else
+            echo "ready=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ready=false" >>"$GITHUB_OUTPUT"
+
+      - name: terraform init
+        if: steps.ready.outputs.ready == 'true'
+        # Read from the commit checked out above; no step in between writes to
+        # the workspace. GitHub's newer `$/` form isn't accepted by actionlint yet.
+        uses: ./.github/actions/terraform-init # zizmor: ignore[self-repository]
+        with:
+          root: ${{ env.ROOT }}
+          role-arn: ${{ vars.INFRA_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-southeast-7' }}
+          state-bucket: ${{ vars.TF_STATE_BUCKET }}
+
+      # Plan and apply that saved plan in the same job, so what is applied is
+      # exactly what was planned here. The pull request already showed the
+      # plan for review; the Environment's reviewers approve before this runs.
+      - name: terraform plan and apply
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          set +e
+          terraform -chdir="$ROOT" plan -no-color -lock-timeout=10m -detailed-exitcode -out=tfplan
+          code=$?
+          set -e
+          case $code in
+            0)
+              echo "### \`$ENVIRONMENT\`: no changes" >>"$GITHUB_STEP_SUMMARY"
+              ;;
+            2)
+              terraform -chdir="$ROOT" apply -no-color -lock-timeout=10m tfplan
+              echo "### \`$ENVIRONMENT\`: applied" >>"$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              exit "$code"
+              ;;
+          esac
+
+  ok:
+    name: infra ok
+    # The required check. It always runs and reports, even when the jobs
+    # above were skipped because nothing under infra/ changed.
+    if: always()
+    needs: [changes, static, plan, apply]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check the results
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "job results: $RESULTS"
+          if grep -qE '"(failure|cancelled)"' <<<"$RESULTS"; then
+            exit 1
+          fi
