@@ -342,9 +342,10 @@ metrics to analyse ([§14](#14-next-steps)).
   volume for its write-ahead log, and the compactor applying retention. It
   reaches S3 through Pod Identity. This is the smallest mode that keeps logs
   in object storage; the next sizes up are simple-scalable and distributed.
-- **Grafana** has Loki provisioned as a data source and its admin password
-  from the External Secret. It has no Ingress; admins reach it with
-  `kubectl port-forward`.
+- **Grafana** has Loki provisioned as a data source, a "Logs overview"
+  dashboard (log volume and error-like lines per namespace, and a log panel)
+  provisioned from Git, and its admin password from the External Secret. It
+  has no Ingress; admins reach it with `kubectl port-forward`.
 
 ### 4.7 Platform add-ons
 

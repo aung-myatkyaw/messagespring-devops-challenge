@@ -2,9 +2,9 @@
 # dev and prod. Grafana is internal only: no Ingress, reached with
 #   kubectl -n logging port-forward svc/grafana 3000:80
 #
-# Stateless: the Loki data source is provisioned from this file and nothing is
-# kept on a volume, so a restart or a new pod changes nothing that matters.
-# (Dashboards would be provisioned the same way, from ConfigMaps in Git.)
+# Stateless: the Loki data source and the dashboards are provisioned from this
+# file and nothing is kept on a volume, so a restart or a new pod changes
+# nothing that matters.
 
 # The admin password comes from Parameter Store through the ExternalSecret in
 # manifests/<env>/. The chart must not generate one: Argo CD renders the chart
@@ -25,6 +25,100 @@ datasources:
         url: http://loki.logging.svc.cluster.local:3100
         isDefault: true
         editable: false
+
+# Dashboards are provisioned from Git too: the chart puts each one in a
+# ConfigMap and Grafana loads it at startup. Read-only in the UI; change them
+# here (export the JSON from Grafana after editing a copy).
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: true
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    logs-overview:
+      json: |
+        {
+          "uid": "logs-overview",
+          "title": "Logs overview",
+          "tags": ["logs", "loki"],
+          "timezone": "browser",
+          "schemaVersion": 39,
+          "refresh": "30s",
+          "time": { "from": "now-1h", "to": "now" },
+          "templating": {
+            "list": [
+              {
+                "name": "namespace",
+                "label": "Namespace",
+                "type": "query",
+                "datasource": { "type": "loki", "uid": "loki" },
+                "query": { "type": 1, "label": "namespace", "stream": "" },
+                "refresh": 2,
+                "multi": true,
+                "includeAll": true,
+                "current": { "text": "All", "value": "$__all" }
+              }
+            ]
+          },
+          "panels": [
+            {
+              "id": 1,
+              "type": "timeseries",
+              "title": "Log lines per namespace",
+              "description": "Shows that Alloy ships logs from every namespace.",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "datasource": { "type": "loki", "uid": "loki" },
+              "targets": [
+                {
+                  "refId": "A",
+                  "datasource": { "type": "loki", "uid": "loki" },
+                  "expr": "sum by (namespace) (count_over_time({namespace=~\"$namespace\"} [$__auto]))",
+                  "legendFormat": "{{namespace}}"
+                }
+              ]
+            },
+            {
+              "id": 2,
+              "type": "timeseries",
+              "title": "Error-like lines per namespace",
+              "description": "Lines containing error, fail or panic (case-insensitive).",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "datasource": { "type": "loki", "uid": "loki" },
+              "targets": [
+                {
+                  "refId": "A",
+                  "datasource": { "type": "loki", "uid": "loki" },
+                  "expr": "sum by (namespace) (count_over_time({namespace=~\"$namespace\"} |~ \"(?i)error|fail|panic\" [$__auto]))",
+                  "legendFormat": "{{namespace}}"
+                }
+              ]
+            },
+            {
+              "id": 3,
+              "type": "logs",
+              "title": "Logs",
+              "gridPos": { "x": 0, "y": 8, "w": 24, "h": 14 },
+              "datasource": { "type": "loki", "uid": "loki" },
+              "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+              "targets": [
+                {
+                  "refId": "A",
+                  "datasource": { "type": "loki", "uid": "loki" },
+                  "expr": "{namespace=~\"$namespace\"}"
+                }
+              ]
+            }
+          ]
+        }
 
 grafana.ini:
   analytics:
