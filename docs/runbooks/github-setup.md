@@ -1,8 +1,8 @@
 # GitHub setup
 
-One-time setup that lets the workflows push images and record releases. Without it the
-pipelines still run lint, build, scan and validation; the steps that need AWS or write to
-Git are skipped.
+One-time setup that lets the workflows push images, record releases, and plan and apply
+Terraform. Without it the pipelines still run lint, build, scan and validation; the steps
+that need AWS, Cloudflare or write access to Git are skipped, not failed.
 
 | What | Kind | Used by | Value |
 | --- | --- | --- | --- |
@@ -12,6 +12,12 @@ Git are skipped.
 | `AWS_REGION` | variable (optional) | all | defaults to `ap-southeast-7` |
 | `RELEASE_APP_CLIENT_ID` | variable | `app.yaml` (deploy commit, promote PR) | GitHub App client ID |
 | `RELEASE_APP_PRIVATE_KEY` | secret | `app.yaml` | GitHub App private key (PEM) |
+| `TF_STATE_BUCKET` | variable | `infra.yaml` | `infra/envs/shared` output `state_bucket_name` |
+| `INFRA_PLAN_ROLE_ARN` | variable | `infra.yaml` (plan on pull requests) | `infra/envs/shared` output `infra_plan_role_arn` |
+| `CLOUDFLARE_API_TOKEN_READ` | secret | `infra.yaml` (dev/prod plans) | Cloudflare token: Zone Read + DNS Read on the zone |
+| `INFRA_APPLY_ENABLED` | variable | `infra.yaml` (apply after merge) | `true` to let merges apply |
+| `INFRA_APPLY_ROLE_ARN` | Environment variable (`shared`, `dev`, `prod`) | `infra.yaml` | `infra/envs/shared` output `infra_apply_role_arns[<env>]` |
+| `CLOUDFLARE_API_TOKEN` | Environment secret (`dev`, `prod`) | `infra.yaml` | Cloudflare token: Zone Read + DNS Edit on the zone |
 
 There are no AWS keys anywhere: workflows get short-lived credentials through OIDC, and each
 IAM role trusts exactly one kind of run (see `infra/modules/github-oidc`).
@@ -70,7 +76,51 @@ Create it (Settings → Developer settings → GitHub Apps → New GitHub App):
 To rotate the key: generate a new one, update the secret, then delete the old key in the
 App's settings. To cut CI off from Git completely, suspend or uninstall the App.
 
-## 3. Default workflow token
+## 3. Infrastructure pipeline
+
+`infra.yaml` checks every infrastructure change (fmt, validate, tflint, Trivy) without any
+credentials. With the setup below it also posts a plan per environment on each pull request
+and applies after merge.
+
+**Plans on pull requests** use a read-only role that only trusts `pull_request` runs:
+
+```bash
+gh variable set TF_STATE_BUCKET     --body "<state_bucket_name>"
+gh variable set INFRA_PLAN_ROLE_ARN --body "<infra_plan_role_arn>"
+gh secret set CLOUDFLARE_API_TOKEN_READ     # paste a Zone Read + DNS Read token
+```
+
+Cloudflare has no OIDC federation, so its tokens are the only stored credentials: a
+read-only one for plans, and an edit token that only the `dev` and `prod` Environments can
+use. dev and prod are planned and applied only once their `terraform.tfvars` hold real
+values instead of the placeholder domain and admin CIDR. Plans don't run for forks or
+Dependabot, which get no OIDC token or secrets; plan a Dependabot Terraform update locally
+before merging it.
+
+**Applies after merge** run shared, then dev, then prod, one at a time, each in its GitHub
+Environment. Each apply role trusts only jobs running in its Environment.
+
+1. Settings → Environments → create `shared`, `dev` and `prod`. For each:
+   - **Deployment branches:** Selected branches → `main`.
+   - `prod` (and `shared`, which holds the CI roles): **Required reviewers** → yourself.
+     In a one-person repository, untick *Prevent self-review*.
+2. Add the apply role and the Cloudflare edit token:
+
+   ```bash
+   for env in shared dev prod; do
+     gh variable set INFRA_APPLY_ROLE_ARN --env "$env" --body "<infra_apply_role_arns[$env]>"
+   done
+   gh secret set CLOUDFLARE_API_TOKEN --env dev    # Zone Read + DNS Edit
+   gh secret set CLOUDFLARE_API_TOKEN --env prod
+   ```
+
+3. Turn applies on: `gh variable set INFRA_APPLY_ENABLED --body true`.
+
+Environments on private repositories need a paid plan; on GitHub Free they work once the
+repository is public. Until then, apply by hand from a laptop (see the cluster bootstrap
+runbook). `infra/bootstrap` and `infra/envs/<env>/bootstrap` are always applied by hand.
+
+## 4. Default workflow token
 
 Settings → Actions → General → Workflow permissions:
 
@@ -79,9 +129,31 @@ Settings → Actions → General → Workflow permissions:
 - Leave **Allow GitHub Actions to create and approve pull requests** unticked: the App opens
   the promote PR, and nothing should approve pull requests automatically.
 
-## 4. Branch protection
+## 5. Branch protection (`main` ruleset)
 
-See the `main` ruleset in the README. The release App is its only bypass actor, so its
-commit to `values-dev.yaml` can go straight to `main` while every other change needs a pull
-request with passing checks. Rulesets on private repositories need a paid plan; on GitHub
-Free they take effect once the repository is public.
+Settings → Rules → Rulesets → New branch ruleset, target `main`:
+
+- **Restrict deletions** and **Block force pushes**
+- **Require linear history** (merge with *Rebase and merge*, so every commit is kept)
+- **Require a pull request before merging**, 0 approvals (one maintainer)
+- **Require status checks to pass:**
+
+  | Check | Workflow |
+  | --- | --- |
+  | `pre-commit` | `pre-commit.yaml` |
+  | `gitleaks (full history)` | `secret-scan.yaml` |
+  | `app ok` | `app.yaml` |
+  | `infra ok` | `infra.yaml` |
+  | `k8s ok` | `k8s.yaml` |
+
+- **Bypass list:** only the release GitHub App, so its commit to `values-dev.yaml` can go
+  straight to `main`. That commit is still validated by `k8s.yaml` on `main`, and the
+  promote PR for prod goes through every check above.
+
+A required check that never reports blocks a pull request forever, so workflows with path
+filters can't be required as they are. `app`, `infra` and `k8s` therefore run on every pull
+request, skip their jobs when their paths didn't change, and end with an `… ok` job that
+always reports. It fails only if a job it depends on failed or was cancelled.
+
+Rulesets on private repositories need a paid plan; on GitHub Free they take effect once the
+repository is public.
