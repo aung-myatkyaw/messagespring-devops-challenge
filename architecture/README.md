@@ -19,6 +19,13 @@ or Karpenter's nodes), and how each component reaches AWS and Cloudflare.
 
 ![Namespaces, node pools and components inside one EKS cluster](kubernetes.png)
 
+## Repository structure ([repository.mmd](repository.mmd))
+
+How the repository is organised, and why each part is where it is. The
+human-run layers are orange.
+
+![How the repository is organised](repository.svg)
+
 ## CI/CD and promotion ([cicd.mmd](cicd.mmd))
 
 From a pull request to production: the required checks, the image build and
