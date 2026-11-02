@@ -43,8 +43,8 @@ locals {
 
       # IMDSv2 only, hop limit 1: pods can't reach the instance metadata service,
       # so they can't borrow the node's IAM role. Workloads get their own role via
-      # Pod Identity instead. (This is why the LB controller is given its VPC ID
-      # and region explicitly; it can't discover them from IMDS.) Karpenter's
+      # Pod Identity instead. (This is why the LB controller is given its region
+      # and finds the VPC by its Name tag; it can't discover them from IMDS.) Karpenter's
       # EC2NodeClass sets the same for its nodes.
       metadata_options = {
         http_endpoint               = "enabled"

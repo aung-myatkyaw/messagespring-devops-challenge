@@ -7,9 +7,10 @@
 
 locals {
   # One rule only: keep the newest N images (tagged or not), expire the rest.
-  # No separate "expire untagged" rule: buildx pushes provenance attestations as
-  # untagged manifests inside a tagged image index, and expiring them would break
-  # the index. Keep N larger than the number of releases prod could roll back to.
+  # No separate "expire untagged" rule: CI pushes one plain manifest per tag
+  # (provenance and SBOM attestations off), so nothing untagged builds up; and if
+  # attestations are turned on, they're untagged manifests inside a tagged index
+  # that such a rule would break. Keep N larger than prod's rollback window.
   lifecycle_policy = jsonencode({
     rules = [
       {

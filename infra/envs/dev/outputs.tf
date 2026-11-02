@@ -11,7 +11,7 @@ output "cluster_name" {
 }
 
 output "vpc_id" {
-  description = "VPC ID (AWS Load Balancer Controller value vpcId)."
+  description = "VPC ID. The load balancer controller finds the VPC by its Name tag instead, so this ID isn't needed in Git."
   value       = module.network.vpc_id
 }
 

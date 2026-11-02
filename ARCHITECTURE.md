@@ -101,8 +101,8 @@ subnet tiers per zone:
 
 The private subnets are large because the VPC CNI gives every pod a VPC IP.
 dev uses one NAT gateway to save money (an AZ outage can cut dev's egress);
-prod has one per zone. An S3 gateway endpoint keeps S3 traffic (Loki chunks,
-ECR image layers, ALB logs) off the NAT, which is free and avoids NAT data
+prod has one per zone. An S3 gateway endpoint keeps S3 traffic from the nodes
+(Loki chunks, ECR image layers) off the NAT, which is free and avoids NAT data
 charges. VPC flow logs go to CloudWatch for troubleshooting and forensics.
 dev uses `10.10.0.0/16` and prod `10.20.0.0/16`, so they could be peered later
 without overlap.
@@ -542,7 +542,9 @@ CIDRs; the app's NetworkPolicy admits only the ALB subnets and allows only DNS
 out; IMDSv2 with a hop limit of 1, so pods can't take the node's IAM
 credentials.
 
-**Workloads.** Pod Security Admission `restricted` everywhere except Alloy;
+**Workloads.** Pod Security Admission `restricted` on every namespace we
+create except Alloy's (`kube-system` keeps the EKS default, since EKS add-ons
+run there);
 non-root, read-only containers with no capabilities; distroless image; no
 service account tokens where not needed; Argo CD projects limiting what each
 Application can create.

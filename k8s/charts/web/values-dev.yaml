@@ -4,8 +4,9 @@
 # through a pull request that edits values-prod.yaml (ECR tags are immutable,
 # so a tag always means the same image).
 #
-# Account ID 123456789012 and example.com are placeholders until
-# scripts/set-env-values.sh writes the real ones.
+# The image repository and tag are real: CI writes them. The other
+# account-specific values (account ID 123456789012, example.com) are
+# placeholders until scripts/set-env-values.sh writes the real ones.
 image:
   repository: 582415712618.dkr.ecr.ap-southeast-7.amazonaws.com/messagespring/web
   tag: "1a3725f"

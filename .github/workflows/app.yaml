@@ -31,9 +31,10 @@ on:
 # Every job asks for what it needs; nothing by default.
 permissions: {}
 
-# One run per branch. A newer push cancels an older run on a pull request; on
-# main, runs queue instead, so releases are never cut off halfway and land in
-# commit order.
+# One run per branch. A newer push cancels an older run on a pull request. On
+# main, a running release is never cancelled, so it's never cut off halfway;
+# GitHub keeps one pending run per group, so if several pushes arrive while one
+# runs, only the newest waits and is released next.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -220,7 +221,7 @@ jobs:
               echo
             fi
             echo "Merging is the production approval; Argo CD rolls it out. A newer build"
-            echo "updates this pull request. To roll back later, revert the merge commit."
+            echo "updates this pull request. To roll back later, revert the release commit."
           } >"$RUNNER_TEMP/pr-body.md"
 
       - name: Open or update the pull request
