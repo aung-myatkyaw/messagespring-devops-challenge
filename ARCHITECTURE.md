@@ -627,8 +627,9 @@ roots look up account-specific values instead of hard-coding them.
   component; **`k8s/platform/<component>/`** holds our values for upstream
   charts; **`k8s/charts/`** holds the charts we wrote.
 - **Account-specific values** (account ID, domain) are placeholders in the
-  committed files; `scripts/set-env-values.sh` writes the real ones for a
-  deployment.
+  committed files until `scripts/set-env-values.sh` writes the real ones for a
+  deployment, as it did for dev's test deployment. The admin IP in
+  `terraform.tfvars` never goes into Git.
 
 ## 10. Reliability and scaling
 

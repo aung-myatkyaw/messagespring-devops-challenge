@@ -144,8 +144,10 @@ To deploy:
 
 ### Placeholders
 
-Nothing account-specific is committed. These placeholders need real values
-for a deployment:
+prod's committed values are placeholders. dev's Kubernetes values hold the
+real ones from the test deployment, and its `terraform.tfvars` keeps
+placeholders (the real values, including the admin IP, stay out of Git). For
+a deployment, these need real values:
 
 | Placeholder | Where | How |
 | --- | --- | --- |
@@ -170,16 +172,26 @@ files, never branches.
 
 ## Status and known issues
 
-- **Tested against AWS:** the shared root (ECR, OIDC provider, CI roles) is
-  applied in a test account; the pipeline has pushed images to ECR, committed
-  a dev release and opened the promote pull request, and pull requests get a
-  real plan for `shared`. dev and prod are validated statically (validate,
-  TFLint, Trivy, rendered and schema-checked manifests) and haven't been
-  applied.
-- **Rulesets and Environments** aren't enforced on a private repository with
-  GitHub Free; they apply once the repository is public. Until then,
-  infrastructure applies are off (`INFRA_APPLY_ENABLED`) and run from a
-  laptop.
+- **Tested on AWS:** the shared root (ECR, OIDC provider, CI roles) runs in
+  a test account, and pull requests get a real plan for `shared`. **dev was
+  deployed** there with the bootstrap runbook and the full cycle tested:
+  every Argo CD Application Synced and Healthy, the app served over HTTPS on
+  a Karpenter Spot node, logs searchable in Grafana; a code change built,
+  pushed and deployed by Argo CD with no `kubectl`; a rollback and roll
+  forward by reverting in Git; self-heal re-creating a deleted resource. dev
+  was then torn down with the same runbook. prod is validated statically
+  (validate, TFLint, Trivy, rendered and schema-checked manifests); it would
+  be built the same way.
+- **Found and fixed by that test:** the Karpenter controller policy exceeded
+  IAM's size limit for managed policies (now inline); Grafana 13 was
+  OOM-killed downloading plugins at every start (download disabled, memory
+  raised); the `apps` AppProject hid the app's pods in the Argo CD UI; the
+  rollback runbook's `git revert` produced a non-Conventional message; and
+  the teardown left Karpenter's instance profile behind. Each fix is a
+  commit on `main`.
+- **The `main` ruleset is active.** Infrastructure applies from CI are off
+  (`INFRA_APPLY_ENABLED` unset, no GitHub Environments created); dev was
+  applied from a laptop with the runbook.
 - **ESLint stays on 9.** `eslint-config-next` 16.4 bundles plugins whose peer
   ranges stop at ESLint 9. ESLint 10 lints this app cleanly but conflicts with
   those ranges. Dev-only, not in the image. Dependabot ignores ESLint majors
