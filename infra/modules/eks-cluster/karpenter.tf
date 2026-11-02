@@ -32,5 +32,11 @@ module "karpenter" {
 
   queue_name = "${var.name}-karpenter"
 
+  # The controller policy is longer than a managed policy may be (6,144
+  # characters; IAM fails with "LimitExceeded ... PolicySize"), so attach it as
+  # an inline role policy (limit 10,240). Same permissions, and the policy
+  # lives and dies with the role.
+  enable_inline_policy = true
+
   tags = var.tags
 }
