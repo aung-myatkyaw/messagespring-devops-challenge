@@ -8,7 +8,7 @@
 # scripts/set-env-values.sh writes the real ones.
 image:
   repository: 582415712618.dkr.ecr.ap-southeast-7.amazonaws.com/messagespring/web
-  tag: "34724ca"
+  tag: "1a3725f"
 
 hpa:
   minReplicas: 1
