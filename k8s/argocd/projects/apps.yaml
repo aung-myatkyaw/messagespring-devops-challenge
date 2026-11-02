@@ -27,6 +27,12 @@ spec:
     - { group: networking.k8s.io, kind: NetworkPolicy }
     - { group: autoscaling, kind: HorizontalPodAutoscaler }
     - { group: policy, kind: PodDisruptionBudget }
+    # Not in Git, but created by Kubernetes for the objects above. Argo CD only
+    # shows live resources the project permits, so without these the UI hides
+    # the Deployment's ReplicaSets and pods and the Service's endpoints.
+    - { group: apps, kind: ReplicaSet }
+    - { group: "", kind: Pod }
+    - { group: discovery.k8s.io, kind: EndpointSlice }
   # Show resources in the namespace that aren't in Git (e.g. created with
   # kubectl) as warnings in the UI.
   orphanedResources:
