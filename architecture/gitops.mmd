@@ -1,0 +1,60 @@
+---
+# Fixed seed: the default look draws some shapes with random curves, so
+# without it every render would produce a different file.
+config:
+  handDrawnSeed: 1
+---
+%% Argo CD app-of-apps for one environment, in sync-wave order.
+%% Each Application waits until every lower wave is synced and Healthy.
+%% Rendered by render.sh into gitops.svg.
+flowchart LR
+    tf["Terraform, run once by a person<br/>infra/envs/&lt;env&gt;/bootstrap"]
+    tf -- "Helm" --> argocd0["Argo CD"]
+    tf -- "Helm" --> root["root Application<br/>k8s/argocd/envs/&lt;env&gt;"]
+    root -- "children,<br/>by wave" --> foundations
+
+    subgraph foundations["Foundations"]
+        direction TB
+        w10["-10 argocd-projects<br/>AppProjects<br/>platform, apps"]
+        w9["-9 namespaces<br/>PSA labels"]
+        w8["-8 argocd (itself)<br/>-8 storage (gp3)"]
+        w10 --> w9 --> w8
+    end
+
+    subgraph nodes["Nodes"]
+        direction TB
+        w7["-7 karpenter"]
+        w6["-6 karpenter-nodes<br/>EC2NodeClass,<br/>NodePool apps"]
+        w7 --> w6
+    end
+
+    subgraph controllers["Controllers"]
+        direction TB
+        w5["-5 load balancer<br/>controller<br/>-5 metrics-server"]
+        w4["-4 external-secrets<br/>ClusterSecretStore"]
+        w3["-3 external-dns<br/>ExternalSecret"]
+        w5 --> w4 --> w3
+    end
+
+    subgraph logging["Logging"]
+        direction TB
+        w2["-2 loki"]
+        w1["-1 alloy<br/>-1 grafana<br/>ExternalSecret"]
+        w2 --> w1
+    end
+
+    subgraph application["Application"]
+        direction TB
+        web["10 web<br/>Helm chart k8s/charts/web<br/>values-&lt;env&gt;.yaml"]
+    end
+
+    foundations --> nodes --> controllers --> logging --> application
+
+    classDef human fill:#fff4e5,stroke:#ef6c00,color:#5d3a00
+    classDef rootproj fill:#eceff1,stroke:#546e7a,color:#263238
+    classDef platform fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    classDef apps fill:#e8f4ea,stroke:#2e7d32,color:#1b5e20
+    class tf human
+    class root,w10 rootproj
+    class w9,w8,w7,w6,w5,w4,w3,w2,w1 platform
+    class web apps

@@ -1,0 +1,4 @@
+# Direct dependency of the diagram scripts. requirements.txt is generated from
+# this file with every transitive dependency pinned by hash:
+#   uv pip compile --universal --generate-hashes --python-version 3.11 requirements.in -o requirements.txt
+diagrams==0.25.1

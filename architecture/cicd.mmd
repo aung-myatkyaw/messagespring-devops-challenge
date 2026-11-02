@@ -1,0 +1,56 @@
+---
+# Fixed seed: the default look draws some shapes with random curves, so
+# without it every render would produce a different file.
+config:
+  handDrawnSeed: 1
+---
+%% CI/CD and promotion: from a pull request to production.
+%% CI builds, scans and writes to Git; only Argo CD changes the clusters.
+%% Rendered by render.sh into cicd.svg.
+flowchart LR
+    dev([Developer]) --> pr[Pull request]
+
+    subgraph checks["Required checks on every pull request"]
+        direction TB
+        pc["pre-commit<br/>hooks + Conventional Commits"]
+        gl["gitleaks<br/>full history"]
+        appck["app ok<br/>lint, typecheck, build,<br/>Trivy image gate"]
+        infck["infra ok<br/>fmt, validate, tflint, Trivy<br/>+ plan per env as a comment"]
+        k8sck["k8s ok<br/>helm lint, kubeconform,<br/>Trivy per chart and env"]
+    end
+
+    pr --> checks --> merge["Rebase merge<br/>to main"]
+
+    subgraph release["app.yaml on main"]
+        direction TB
+        build["Build image<br/>tag = commit SHA"] --> scan{"Trivy<br/>HIGH/CRITICAL?"}
+        scan -- none --> push["Push to ECR<br/>OIDC role, immutable tag"]
+        scan -- found --> stop([Stop: nothing pushed])
+        push --> devcommit["GitHub App commits<br/>values-dev.yaml"]
+        devcommit --> promote["GitHub App opens or updates<br/>promote PR: values-prod.yaml"]
+    end
+
+    subgraph infra["infra.yaml on main (when enabled)"]
+        direction TB
+        ashared["apply shared"] --> adev["apply dev"] --> aprod["apply prod<br/>Environment reviewer"]
+    end
+
+    merge -- "application/** changed" --> build
+    merge -- "infra/** changed" --> ashared
+
+    devcommit -. "Argo CD syncs" .-> devcluster[("dev cluster")]
+    promote --> review{"Review and merge<br/>= prod approval"}
+    review -. "Argo CD syncs" .-> prodcluster[("prod cluster")]
+
+    subgraph scheduled["Scheduled"]
+        direction TB
+        rescan["image-rescan, daily<br/>Trivy on the dev and prod images<br/>opens or updates an issue"]
+        deps["Dependabot, weekly<br/>actions, npm, Docker,<br/>Terraform, pre-commit"]
+    end
+
+    deps -.-> pr
+
+    classDef cluster fill:#e8f4ea,stroke:#2e7d32,color:#1b5e20
+    classDef gate fill:#fff4e5,stroke:#ef6c00,color:#5d3a00
+    class devcluster,prodcluster cluster
+    class scan,review gate
