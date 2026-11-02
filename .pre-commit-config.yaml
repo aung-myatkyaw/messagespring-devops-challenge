@@ -22,7 +22,8 @@ repos:
       # developer's local ~/.aws/credentials (false positives); gitleaks covers it.
 
   # Secret scanning over the staged diff (the secret-scan workflow covers the
-  # whole history in CI; keep both on the same version)
+  # whole history in CI; keep the version in step with
+  # scripts/install-ci-tools.sh)
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
     hooks:
@@ -58,7 +59,8 @@ repos:
       - id: conventional-pre-commit
         stages: [commit-msg]
 
-  # Tools installed locally (brew install hadolint kubeconform helm yq)
+  # Tools installed locally (brew install hadolint kubeconform helm yq);
+  # CI installs pinned versions with scripts/install-ci-tools.sh
   - repo: local
     hooks:
       - id: hadolint
@@ -66,21 +68,9 @@ repos:
         entry: hadolint
         language: system
         files: (^|/)Dockerfile$
-      # Raw manifests (Argo CD Applications/AppProjects, Namespaces); Helm templates
-      # are validated after rendering (validate-k8s). CRD kinds are checked against
-      # the community CRD catalog, so a typo in an Application fails too.
-      - id: kubeconform
-        name: kubeconform (k8s schema validation)
-        entry: >-
-          kubeconform -strict -summary -kubernetes-version 1.36.0
-          -schema-location default
-          -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
-        language: system
-        files: ^k8s/.*\.ya?ml$
-        exclude: ^k8s/(.*/)?(templates/|Chart\.yaml|values.*\.yaml)
-      # Local Helm charts with every values-<env>.yaml, and the upstream charts
-      # of the platform Applications with our values: render, then schema-check
-      # the output (same script as CI).
+      # Raw manifests, local Helm charts with every values-<env>.yaml, and the
+      # upstream charts of the platform Applications with our values: render,
+      # then schema-check the output (same script as CI).
       - id: validate-k8s
         name: validate-k8s (helm lint + template | kubeconform)
         entry: scripts/validate-k8s.sh

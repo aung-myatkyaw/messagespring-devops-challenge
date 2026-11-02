@@ -2,9 +2,11 @@
 # Renders what Argo CD would deploy and validates it against the Kubernetes API
 # schemas of our cluster version. The same script runs in pre-commit and CI.
 #
-#   1. Local Helm charts (k8s/charts/*): helm lint, then helm template with
+#   1. Raw manifests: Argo CD Applications and AppProjects, Namespaces and
+#      the plain-manifest sources (everything in k8s/ that isn't a chart).
+#   2. Local Helm charts (k8s/charts/*): helm lint, then helm template with
 #      each values-<env>.yaml.
-#   2. Upstream charts used by the platform Applications
+#   3. Upstream charts used by the platform Applications
 #      (k8s/argocd/envs/<env>/*.yaml): helm template at the pinned version
 #      with our values files, plus any plain-manifest sources. This catches a
 #      values file that no longer fits the chart before Argo CD does.
@@ -18,10 +20,13 @@ set -euo pipefail
 KUBERNETES_VERSION="1.36.0"
 
 # Built-in kinds from the default schema repo; CRDs (Argo CD, Karpenter, ...)
-# from the community CRD catalog.
+# from the community CRD catalog, pinned to a commit so a change upstream
+# can't break or loosen validation unnoticed. Bump it with chart upgrades
+# that bring new CRD versions.
+CRDS_CATALOG_REF="27233a506de0085e71c7f9702597806a7f95eb24" # 2026-11-01
 SCHEMA_LOCATIONS=(
   -schema-location default
-  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+  -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/${CRDS_CATALOG_REF}/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
 )
 
 cd "$(git rev-parse --show-toplevel)"
@@ -31,6 +36,19 @@ kubeconform_check() {
 }
 
 status=0
+
+# --------------------------------------------------------------- raw manifests
+# Chart templates and values files aren't Kubernetes objects; they're
+# validated after rendering, below.
+echo "==> raw manifests"
+manifests=()
+while IFS= read -r file; do
+  manifests+=("$file")
+done < <(find k8s -type f \( -name '*.yaml' -o -name '*.yml' \) \
+  -not -path '*/templates/*' -not -name 'Chart.yaml' -not -name 'values*.yaml' | sort)
+if ! kubeconform_check "${manifests[@]}"; then
+  status=1
+fi
 
 # ---------------------------------------------------------------- local charts
 for chart in k8s/charts/*/; do
