@@ -34,6 +34,12 @@ grafana.ini:
   # local admin user.
   auth.anonymous:
     enabled: false
+  # Grafana otherwise downloads a set of app plugins from grafana.com on every
+  # start. That's unpinned code from the internet at runtime, repeated on each
+  # restart because nothing is persisted, and the download spike OOM-killed the
+  # pod. The Loki data source is built in; no plugins are needed.
+  plugins:
+    preinstall_disabled: true
 
 nodeSelector:
   role: system
@@ -42,12 +48,14 @@ tolerations:
     operator: Exists
     effect: NoSchedule
 
+# Grafana 13 needs more than 256Mi at startup (database migrations, the
+# unified storage index). The chart sets GOMEMLIMIT from the limit.
 resources:
   requests:
     cpu: 50m
-    memory: 128Mi
-  limits:
     memory: 256Mi
+  limits:
+    memory: 512Mi
 
 # Helm test pod; Argo CD doesn't run Helm tests.
 testFramework:
